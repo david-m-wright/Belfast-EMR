@@ -1,0 +1,62 @@
+---
+title: "DMO in BHSCT Macular Service - Analysis Notes"
+author: "David M Wright - d.wright@qub.ac.uk"
+date: "Document compiled: `r Sys.Date()`"
+output: 
+  bookdown::html_document2:
+     toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(knitr)
+library(kableExtra)
+library(rprojroot)
+```
+
+`r R.version.string`   
+
+This analysis is of Electronic Medical Records (EMR) from the Belfast Health and Social Care Trust Macular Service.
+
+```{r run-analysis, include=FALSE}
+source(find_rstudio_root_file("Code/assemble-EMR-data.R"))
+```
+
+# Cohort construction
+
+Data were extracted by Medisoft with the following inclusion  and  exclusion criteria. 
+
+Inclusion: "Any patient having attended the BHSCT macular treatment service at least once during the period May 2008 to date of extraction with a diagnosis DR/DMO."
+Exclusion: "Any patient marked as a test patient."
+
+The data structure is defined in the file `Novartis DMO Study - Data Dictionary v1.1.xls` and a total of 18 separate pipe delimited files were provided.
+
+Data were extracted on `r as.Date(max(patients$ExtractDate))`.
+
+
+EMR for a total of `r nrow(indiv_raw)` patients were included in the extracted dataset. 
+
+* `r nrow(filter(indiv_raw, exclude_injections))` patients were excluded because they did not receive any anti-VEGF injections.   
+* `r nrow(filter(indiv_raw, !exclude_injections, exclude_age))` patients were <18 at the index date.
+* `r nrow(filter(indiv_raw, !exclude_injections, !exclude_age, exclude_no_diagnosis))` patients with no DMO diagnosis recorded in the 180 days previous to the index date. Diagnosis was defined using the ICD10 code (`DiagnosisICD10Code == "H36.0 + E14.3"`).   
+* `r nrow(filter(indiv_raw, !exclude_injections, !exclude_age, !exclude_no_diagnosis, exclude_no_intervals))` patients where neither eye received any injections after the index date.
+
+A total of `r  nrow(filter(indiv_raw, !exclude_injections, !exclude_age, !exclude_no_diagnosis, !exclude_no_intervals))` patients remained after these exclusions.
+For these patients there was a total of `r n_eyes` eyes observed for a total of `r n_intervals` treatment intervals (between injections). 
+
+
+```{r descriptives}
+bind_rows(
+  indiv %>% 
+  summarise(across(IndexAge, .fns = SummariseSD)) %>% 
+  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Value"),
+  indiv %>% 
+    SummariseDiscreteOneway(vars(Gender, Treated))
+  
+) %>% 
+  select(Variable, Level, Value) %>% 
+  kbl(caption = "Baseline demographics and characteristics of patients with DMO. Mean and SD reported for continuous variables, frequency and percentage reported for categorical variables.") %>% 
+  kable_paper()
+
+```
+
