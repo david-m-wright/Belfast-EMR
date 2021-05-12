@@ -27,176 +27,134 @@ MaxVotes <- function(x){
 }
 
 
-# Functions for generating descriptive statistics
-# Continous variables
-
-
-# Function to summarise continuous variables
-SummariseContinuous <- function(x){
-  tibble(Min = min(x, na.rm = T),
-         Median = median(x, na.rm = T),
-         Mean = mean(x, na.rm = T),
-         Max = max(x, na.rm = T),
-         SD = sd(x, na.rm = T),
-         Missing = sum(is.na(x))) %>% 
-    mutate_all(round, digits = 2)
-}
-
-
-# SD and mean for continous variables
-SummariseSD <- function(x, digits = 1, n = FALSE){
-  out <- paste0(round(mean(x, na.rm = T), digits), 
-         " (", 
-         round(sd(x, na.rm = T), digits), 
-         ")")
-  # Report number of valid records
-  if(n){
-   out <- paste0(out, " [", 
-          sum(!is.na(x)),
-          "]")
+# Function to calculate SD and mean for continous variables
+# Args: x = numeric vector to summarise
+# output_n = logical indicating whether to return the number of non-missing cases in square brackets
+# sig_digits = number of significant digits to report
+SummariseSD <- function(x, output_n = F, sig_digits = 1){
+  mean_sd <- paste0(signif(mean(x, na.rm = T), digits = sig_digits), 
+                    " (", 
+                    signif(sd(x, na.rm = T), digits = sig_digits), 
+                    ")")
+  if(output_n){
+    paste0(mean_sd, " [", 
+           sum(!is.na(x)),
+           "]") 
+  } else {
+    mean_sd
   }
-  out
 }
 
-# Median and interquartile range for continuous variables
-SummariseMedian <- function(x, digits = 1, n = FALSE){
-  out <- paste0(round(median(x, na.rm = T), digits), 
-         " (", 
-         round(quantile(x, probs = c(0.25), na.rm = T), digits), 
-         ", ",
-         round(quantile(x, probs = c(0.75), na.rm = T), digits), 
-         ")")
-  if(n){
-    out <- paste0(out, " [", 
+# Function to calculate median and interquartile range for continuous variables
+# Args: x = numeric vector to summarise
+# output_n = logical indicating whether to return the number of non-missing cases in square brackets
+# sig_digits = number of digits to report
+SummariseMedianIQR <- function(x, output_n = F, sig_digits = 1){
+  median_iqr <- paste0(signif(median(x, na.rm = T), digits = sig_digits), 
+                       " (", 
+                       signif(quantile(x, probs = c(0.25), na.rm = T), digits = sig_digits), 
+                       ", ",
+                       signif(quantile(x, probs = c(0.75), na.rm = T), digits = sig_digits), 
+                       ")")
+  if(output_n) {
+    paste0(median_iqr, " [", 
            sum(!is.na(x)),
            "]")
-  }
-  out    
-}
-
-# Counts and percentages for discrete variables
-# Args: dat = data frame from which to tabulate variables
-# var1_list = vars() specification listing variables to tabulate (rows)
-SummariseDiscreteOneway <- function(dat, var1_list){
-  
-  map_dfr(var1_list, ~tabyl(dat = {{dat}}, var1 = !!.) %>% 
-            adorn_pct_formatting(digits = 1) %>%
-            
-            # Add columns for variable and level names
-            mutate(Variable = names(.)[1]) %>% 
-            rename(Level = names(.)[1])
-  ) %>% 
-    mutate(Value = paste0(n, " (", percent, ")")) %>% 
-    select(Variable, Level, Value)
-}
-
-# patients %>% 
-#   SummariseDiscreteOneway(vars(Gender, EthnicCode))
-
-
-
-
-
-# Twoway display of continuous variables
-SummariseContinousTwoway <- function(dat, var1_list, var2, summary_function = SummariseSD){
-  # Which type of summary to take 
-  summary_function <- summary_function
-  
-  # Select the data to summarise
-  selected_data <- if("quosures" %in% class(var1_list)){
-    {{dat}} %>% 
-      select(!!!var1_list, {{var2}})
   } else {
-    {{dat}} %>% 
-      select(!!var1_list, {{var2}})
+    median_iqr
   }
-  selected_data %>% 
-    group_by({{var2}}) %>% 
-    summarise_at({{var1_list}}, summary_function) %>%
-    pivot_longer(-{{var2}}, names_to = "Variable") %>% 
-    pivot_wider(names_from = {{var2}}, values_from = value)
 }
-# SummariseContinousTwoway(study_eye_data, c("Age", "HbA1c"), DM_DR_status)
-# SummariseContinousTwoway(study_eye_data, c("Age", "HbA1c"), DM_DR_status, SummariseMedian)
 
-# Perform t-test for each of a set of continuous variables,
-# classified by a single discrete variable
-# Args: dat = data frame from which to test variables
-# var1_list = character vector or vars() specificiation listing variables to test (rows)
-# var2 = unquoted name of variable to test by (columns)
-SummariseTTest <- function(dat, var1_list, var2){
-  
-  vars_to_test <- if("quosures" %in% class(var1_list)){
-    var1_list %>% 
-      map(., quo_name)
+
+# Function to calculate median and range for continuous variables
+# Args: x = numeric vector to summarise
+# output_n = logical indicating whether to return the number of non-missing cases in square brackets
+# sig_digits = number of significant digits to report
+SummariseMedianRange <- function(x, output_n = F, sig_digits = 1){
+  median_range <- paste0(signif(median(x, na.rm = T), digits = sig_digits), 
+                         " (", 
+                         signif(min(x, na.rm = T), digits = sig_digits), 
+                         ", ",
+                         signif(max(x, na.rm = T), digits = sig_digits), 
+                         ")")
+  if(output_n) {
+    paste0(median_range, " [", 
+           sum(!is.na(x)),
+           "]")
   } else {
-    var1_list
+    median_range
   }
-  
-  var2 <- enquo(var2)
-  
-  # Perform the t-tests
-  vars_to_test %>% 
-    map_dfr(~broom::tidy(t.test(as.formula(paste(., "~", quo_name(var2))), data = {{dat}}))) %>% 
-    transmute(Variable = vars_to_test, 
-              `t statistic` = round(statistic, digits = 2),
-              df = round(parameter, digits = 1),
-              P = format.pval(p.value, eps = 0.001, digits = 2))
 }
 
-
-
-# Discrete variables
-
-# Frequencies and percentages for discrete variables
-SummariseDiscrete <- function(x){
-  as.vector(x) %>% 
-    tabyl() %>% 
-    rename(Value = ".") %>% 
-    adorn_pct_formatting()
+# Function to generate a frequency table for a discrete variable (n, %),
+# optionally cross tabulated by a second variable
+# Args: data = data.frame containing data to tabulate
+# row_var = unquoted name of variable to tabulate
+# col_var = for a two-way table, unquoted name of variable to cross tabulate
+# sig_digits = integer giving number of significant digits to report
+# Value: tibble containing formatted counts and column percentages
+DiscreteFrequency <- function(data, row_var, col_var, sig_digits = 3){
+  count(data, {{row_var}}, {{col_var}}) %>% 
+    pivot_wider(names_from = {{col_var}},  values_from = n, values_fill = 0, names_sort = T) %>%
+    mutate(across(-1, ~paste0(., " (", signif(./sum(.)*100, digits = sig_digits), "%)"))) %>% 
+    rename_with(~"Value", .cols = (matches("^n$"))) %>% 
+    rename(Level = {{row_var}}) %>%
+    mutate(across(Level, as.character))
 }
 
+#  
+#  study_eye_data %>% 
+#    DiscreteFrequency(row_var = DM_Type)
+# # 
+#  study_eye_data %>% 
+#    DiscreteFrequency(DM_Type, col_var = DM_DR_status)
+#  
 
-# Twoway frequency and percentage table for discrete variables
-# Args: dat = data frame from which to tabulate variables
-# var1_list = character vector or vars() specification listing variables to tabulate (rows)
-# var2 = unquoted name of variable to tabulate by (columns)
-SummariseDiscreteTwoway <- function(dat, var1_list, var2){
+
+# Function to generate a table of descriptive statistics,
+# displaying summaries of continuous variables (e.g. mean, SD) or distribution of discrete variables (e.g. %) as appropriate
+# Args: dat = data.frame containing data to tabulate
+# Each column will form a row of the descriptive table
+# col_var = for a two-way table, unquoted name of variable to cross tabulate
+# type = named character vector specifying the type of summary statistic for continuous variables
+# default is mean and SD, can also specify median and IQR or median and range
+# sig_digits = integer indicating the number of significant digits to report for each summary
+# output_n = logical indicating whether to return the number of non-missing cases in square brackets
+# Value: tibble containing formatted table of descriptives
+GenerateDescriptives <- function(data, col_var = NULL, type = NULL, sig_digits = 3, output_n = FALSE){
   
-  # Generate the base frequency tables, one for each variable in the var1_list
-  # Tabulates frequencies of var1 by var2
-  cross_tabs <- if("quosures" %in% class(var1_list)){
-    {{var1_list}}
-  } else {
-    var1_list %>% 
-      syms() 
-  }
+  # Columns to tabulate
+  tab_data <- data %>% 
+    select(-{{col_var}})
   
-  map_dfr(cross_tabs, ~tabyl(dat = {{dat}}, var1 = !!.,  var2 = {{var2}}) %>% 
-            
-            # Format percentages
-            adorn_totals() %>%
-            adorn_percentages(denominator = "col") %>%
-            adorn_pct_formatting(digits = 1) %>%
-            adorn_ns(position = "front") %>%
-            
-            # Add columns for variable and level names
-            mutate(Variable = names(.)[1]) %>% 
-            rename(Level = names(.)[1])) %>%
-    
-    # Drop the excess totals rows
-    mutate(row_number = row_number()) %>% 
-    filter(is.na(Level) | !(Level == "Total" & row_number != max(row_number))) %>% 
-    mutate(Variable = if_else(row_number == max(row_number), "Total", Variable),
-           Level = if_else(row_number == max(row_number), "-", Level)) %>% 
-    select(-row_number) %>% 
+  # Select type of numerical summary for continuous variables 
+  ctype <- setNames(rep("Mean (SD)", length.out = ncol(tab_data)),
+                    map(names(tab_data), rlang::as_name))
+  ctype[match(names(type), names(ctype))] <- type
+  
+  # Cross tabulate each variable in the list
+  base_table <- map2_dfr(.x = setNames(names(ctype), names(ctype)), 
+                         .y = ctype, 
+                         .f = ~if(is.numeric(data[[.x]]))
+                         { 
+                           data %>%
+                             group_by({{col_var}}) %>%
+                             summarise(n = switch(.y,
+                                                  `Median (IQR)` = SummariseMedianIQR(.data[[.x]], sig_digits = sig_digits, output_n = output_n),
+                                                  `Median (Range)` = SummariseMedianRange(.data[[.x]], sig_digits = sig_digits, output_n = output_n),
+                                                  SummariseSD(.data[[.x]], sig_digits = sig_digits, output_n = output_n)),
+                                       .groups = "drop") %>%
+                             mutate(Value = "Value") %>%
+                             pivot_wider(names_from =   -n,  values_from = n) %>%
+                             rename_with(~str_replace(., "_Value", ""), ends_with("_Value")) %>% 
+                             mutate(Level = .y)
+                         } else { 
+                           DiscreteFrequency(data, row_var = .data[[.x]], col_var = {{col_var}}, sig_digits = sig_digits)
+                         }, .id = "Variable")
+  
+  base_table %>% 
     select(Variable, Level, everything())
-  
-}
-#SummariseDiscreteTwoway(choroid_eyes, vars(Sex, Study_eye), DM_DR_status)
-#SummariseDiscreteTwoway(choroid_eyes, c("Sex", "Study_eye"), DM_DR_status)
-
-
+}  
 
 # Perform chi-squared test for each of a set of discrete variables,
 # classified by a single discrete variable
