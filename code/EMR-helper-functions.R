@@ -2,19 +2,6 @@
 library(janitor)
 library(tidyverse)
 
-# Function to clean up NISA study IDs
-# Args:
-# x = character vector of IDs to be cleaned
-# Value: character vector of cleaned IDs
-CleanNISA <- function(x){
-  toupper(str_replace_all(x, " ", "")) %>% 
-    # For NICOLA IDs
-    if_else(str_detect(., "^N[0-9]{5}"), .,
-            # For NISA IDs
-            str_replace(., "(2)([0-9]{3})", "\\1-\\2") %>% 
-              str_extract("^(NISA|DMO|NISA2-|GWN)[0-9]{3}"))
-}
-
 
 # Function to select most frequently occuring non-missing value from a set of values
 # Or first (using sort()) in case of ties
@@ -277,8 +264,6 @@ DummyToFactor <- function(dat, dummy_list, id_var, out_var, baseline_group = NUL
 CalculateSphericalEquivalent <- function(sphere, cylinder){
   if_else(cylinder == 0 | is.na(cylinder), sphere, sphere + cylinder/2)
 }
-
-
 
 
 
