@@ -50,21 +50,18 @@ The following steps were taken to pre-process the data:
 
 ### DMOInjections table
 
-* Add visual acuity measurements to the corresponding injection.
-* Removal of `r nrow(filter(injections_raw, exclude_not_antiVEGF))` injections that were not for anti-VEGF agents.
-* Removal of `r nrow(filter(injections_raw, !exclude_not_antiVEGF, exclude_duplicate_encounter))` duplicate injection entries.   
+* Removed `r nrow(filter(injections_raw, exclude_not_antiVEGF))` injections that were not for anti-VEGF agents.
+* Removed `r nrow(filter(injections_raw, !exclude_not_antiVEGF, exclude_duplicate_encounter))` duplicate injection entries.   
+* Added visual acuity measurements to the corresponding injection record.
 
-A total of `r nrow(injections_clean)` injection records remained after these removals.
+A total of `r nrow(injections_clean)` injection records remained.
 
+### Derived tables
 
-### Eye summary
-
-* Identification of the first injection recorded for each eye and the date (the index date).   
-* Calculation of patient ages at the index date and at study period end and total observation period for each eye.   
-* Creation of new table (`eye`) containing patient details, follow up period and baseline VA.
-
-
-* Calculation of treatment intervals.   
+* Identified first injection recorded for each eye and the date (the index date).   
+* Calculated patient ages at the index date and at study period end and total observation period for each eye.   
+* Creation of new table (`eye`) containing patient details, follow up period and baseline VA.   
+* Calculated treatment intervals (`treatment_intervals` table).   
 
 
 
@@ -75,16 +72,16 @@ Data were extracted by Medisoft with the following inclusion  and  exclusion cri
 Inclusion: "Any patient having attended the BHSCT macular treatment service at least once during the period May 2008 to date of extraction with a diagnosis DR/DMO."   
 Exclusion: "Any patient marked as a test patient."
 
-EMR for a total of `r nrow(patients)` patients were included in the extracted dataset, with `r nrow(injections)` valid records of anti-VEGF injections. The unit of analysis is the eye so criteria were applied at the eye level:   
+EMR for a total of `r nrow(patients)` patients were included in the extracted dataset, with `r nrow(injections_clean)` valid records of anti-VEGF injections. The unit of analysis is the eye so criteria were applied at the eye level:   
 
 * `r nrow(eye_raw)` eyes received at least one anti-VEGF injection.   
-* `r nrow(filter(eye_raw, !exclude_age, exclude_no_intervals))` eyes that received no injections after the index date were excluded.
 
-A total of `r nrow(eye)` eyes from `r nrow(distinct(eye, PatientID))` patients remained after these exclusions. A total of `r nrow(injections)` injection records remained giving `r as.integer(sum(eye$total_intervals))` treatment intervals (between injections). 
-
+A total of `r nrow(eye)` eyes from `r nrow(distinct(eye, PatientID))` patients were included. A total of `r nrow(injections)` injection records remained giving `r as.integer(sum(eye$total_intervals))` treatment intervals  (`r nrow(filter(eye, total_intervals == 0))` eyes received no further injections after the index date and so no treatment intervals were calculated for these).
 
 
 # Descriptive statistics
+
+Basic descriptive statistics at the individual level are given in Table \@ref(tab:descriptives)). The majority of patients were male and received unilateral treatment. Table \@ref(tab:va-baseline) gives the Visual acuity at baseline (index date). The majority of eyes had VA between 33 and 73 ETDRS letters.
 
 ```{r descriptives}
 indiv %>% 
@@ -92,7 +89,6 @@ indiv %>%
   GenerateDescriptives(type = c(Age = "Median (Range)")) %>% 
   kbl(caption = "Baseline demographics and characteristics of patients with DMO. Frequency and percentage reported for categorical variables.") %>% 
   kable_paper()
-
 ```
 
 ```{r va-baseline}
@@ -100,9 +96,57 @@ eye %>%
   select(`ETDRS letters`,`ETDRS category`) %>% 
   mutate(Eyes = " ") %>% 
   GenerateDescriptives() %>% 
-  kbl(caption = "Visual acuity at baseline.") %>% 
+  kbl(caption = "Visual acuity at baseline. Frequency and percentage reported for categorical variables.") %>% 
   kable_paper()
 ```
+Table \@ref(tab:descriptives-by-injections) gives the distribution of baseline characteristics by the number of injections received. In comparison with other groups, a much greater proportion of those that received only a single injection had very poor visual acuity at baseline. 
+
+```{r descriptives-by-injections}
+eye %>% 
+  transmute(Age = index_age, Gender, `ETDRS letters`,`ETDRS category`, `Years under treatment` = years_treated, Eyes = " ", Injections) %>% 
+  GenerateDescriptives(type = c(Age = "Median (Range)"), col_var = Injections) %>% 
+  kbl(caption = "Baseline demographics, visual acuity and years under treatment by number of injections received during study period. Frequency and percentage reported for categorical variables.") %>% 
+  kable_paper()
+```
+The proportion of eyes with a treatment interval exceeding 12 weeks increased with year of treatment (time since index date) (Table \@ref(tab:descriptives-gt12-weeks)). Those with no treatment intervals exceeding 12 weeks during a given year were more likely to have had worse visual acuity at baseline (compare ETDRS letters in Tables \@ref(tab:descriptives-none-gt12-weeks) and \@ref(tab:descriptives-any-gt12-weeks)). This suggests that worse visual acuity at baseline is associated with reduced probability of extended treatment intervals, even many years into treatment. 
+
+```{r descriptives-gt12-weeks}
+treatment_intervals_summary %>% 
+  transmute("Any intervals >12 weeks" = any_gt12_weeks, 
+            "N intervals > 12 weeks" = n_gt12_weeks, 
+            Eyes = " ", 
+            year_of_treatment) %>% 
+  GenerateDescriptives(type = c("N intervals > 12 weeks" = "Median (IQR)"), col_var = year_of_treatment) %>% 
+  kbl(caption = "Distribution of interval lengths by year of treatment.") %>% 
+  kable_paper()
+```
+```{r descriptives-none-gt12-weeks}
+treatment_intervals_summary %>% 
+  filter(!any_gt12_weeks) %>% 
+  select(PatientID, EyeCode, year_of_treatment) %>% 
+  inner_join(eye %>% 
+               distinct(PatientID, EyeCode, Age = index_age, Gender, `ETDRS letters`, `ETDRS category`, Eyes = " "),
+             by = c("PatientID", "EyeCode")) %>% 
+  select(Age, Gender, `ETDRS letters`, `ETDRS category`, Eyes, year_of_treatment) %>% 
+  GenerateDescriptives(type = c(Age = "Median (Range)"), col_var = year_of_treatment) %>% 
+  kbl(caption = "Baseline demographics and visual acuity by year of treatment among those with NO treatment interval greater than 12 weeks during that year of treatment. Frequency and percentage reported for categorical variables.") %>% 
+  kable_paper()
+```
+
+```{r descriptives-any-gt12-weeks}
+treatment_intervals_summary %>% 
+  filter(any_gt12_weeks) %>% 
+  select(PatientID, EyeCode, year_of_treatment) %>% 
+  inner_join(eye %>% 
+               distinct(PatientID, EyeCode, Age = index_age, Gender, `ETDRS letters`, `ETDRS category`, Eyes = " "),
+             by = c("PatientID", "EyeCode")) %>% 
+  select(Age, Gender, `ETDRS letters`, `ETDRS category`, Eyes, year_of_treatment) %>% 
+  GenerateDescriptives(type = c(Age = "Median (Range)"), col_var = year_of_treatment) %>% 
+  kbl(caption = "Baseline demographics and visual acuity by year of treatment among those with AT LEAST ONE treatment interval greater than 12 weeks during that year of treatment. Frequency and percentage reported for categorical variables.") %>% 
+  kable_paper()
+```
+
+
 # Treatment sequences
 
 ```{r treatment-intervals, fig.cap= "Treatment sequences for a sample of eyes.", fig.height = 7}

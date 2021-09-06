@@ -3,6 +3,25 @@ library(janitor)
 library(tidyverse)
 
 
+# Function to reformat the intervals produced by cut() into more familiar inequality notation
+# Args: x = character vector to reformat,
+# unit = character string to be placed in the middle of the inequality
+IntervalToInequality <- function(x, unit = "x"){
+  enframe(x) %>% 
+    separate(value, sep = ",", into = c("lower", "upper"), remove = FALSE) %>% 
+    mutate(
+      # lclosed = if_else(str_detect(lower, "\\["), "\u2264", "<"),
+      # uclosed = if_else(str_detect(upper, "\\]"), "\u2264", "<"),
+      lclosed = if_else(str_detect(lower, "\\["), "<=", "<"),
+      uclosed = if_else(str_detect(upper, "\\]"), "<=", "<"),
+      
+      across(c(lower, upper), ~str_remove(., "(\\[|\\(|\\)|\\])")),
+      output = if_else(!is.na(value), paste(lower, lclosed, unit, uclosed, upper), as.character(NA))) %>% 
+    pull(output)
+}
+# IntervalToInequality(baseline$Myopia)
+
+
 # Function to select most frequently occuring non-missing value from a set of values
 # Or first (using sort()) in case of ties
 # Args:

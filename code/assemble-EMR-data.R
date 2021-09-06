@@ -102,7 +102,11 @@ injection_summary_eye  <- injections_clean %>%
             final_injection_date = max(EncounterDate), 
             total_injections = n(),
             .groups = "drop") %>% 
-  mutate(total_intervals = total_injections - 1)
+  mutate(total_intervals = total_injections - 1) %>% 
+
+  mutate(Injections = cut(total_injections, breaks = c(0,1,2,3, 12, max(total_injections)))) %>% 
+  mutate(across(Injections, ~fct_relabel(., .fun = IntervalToInequality, unit = "n")))
+
 
 
 # DMO diagnosis history of each eye
@@ -157,16 +161,19 @@ eye_raw <- patients %>%
                                 breaks = c(0, 32, 73, 100), 
                                 labels = c("<33 letters", "33-73 letters", ">73 letters"), include.lowest = T), 
                                 na_level = "Missing"))
-
+  
 
 # Apply the exclusion criteria
 eye <- eye_raw %>% 
-  filter(!exclude_age, !exclude_no_intervals)
+  # filter(!exclude_age, !exclude_no_intervals)
+  filter(!exclude_age)
+
 
 # Just the injections relating to selected eyes
 injections <- injections_clean %>% 
   inner_join(eye %>% 
                select(PatientID, EyeCode, index_date), by = c("PatientID", "EyeCode")) 
+
 
 
 ## Calculate treatment intervals for the cohort ##
@@ -179,23 +186,54 @@ treatment_intervals <- injections %>%
   # Timeline since the index date for each person
   # First and second year since treatment start concept not relevant because do not know the date of first injection (no clinic entry date recorded)
     mutate("Treatment interval" = if_else(treatment_interval_weeks > 12, ">12 weeks", "<=12 weeks"),
-         follow_up_months = interval(index_date, EncounterDate)/dmonths()) %>% 
+         # Month in which the interval started
+          follow_up_months = interval(index_date, EncounterDate)/dmonths(),
+         # Year of treatment in which the interval started 
+         year_of_treatment = factor(floor(interval(index_date, EncounterDate)/dyears())+1),
+         year_of_treatment = fct_collapse(year_of_treatment, ">=6" = c("6","7","8","9","10", "11"))) %>% 
   # Injection sequence (index injection = 1)
   mutate(injection_seq = row_number()) %>% 
   ungroup() %>% 
   mutate(sequence_id = abbreviate(paste(PatientID, EyeCode))) 
 
+treatment_intervals %>% 
+  count(follow_up_months, year_of_treatment) %>% print(n=100)
 
-# Find treatment naive patients
+# Summarise treatment intervals by year of treatment
+treatment_intervals_summary <-  treatment_intervals %>% 
+  group_by(PatientID, EyeCode, year_of_treatment) %>% 
+  summarise(any_gt12_weeks = any(`Treatment interval` == ">12 weeks"),
+            n_gt12_weeks = sum(treatment_interval_weeks > 12),
+            prop_gt12_weeks = n_gt12_weeks/length(treatment_interval_weeks), .groups = "drop")
   
 
-clinical <- read_delim(paste0(file_path, "/DMOClinicalFindings.txt"), delim = "|")
+# Find treatment naive patients
 
-co_pathology <- read_delim(paste0(file_path, "/DMOCoPathology.txt"), delim = "|")
+treatment_intervals_summary %>% 
+  ggplot(aes(x = prop_gt12_weeks, fill =any_gt12_weeks)) +
+  geom_histogram() +
+  facet_wrap(~year_of_treatment)
 
-diabetic_diagnosis <- read_delim(paste0(file_path, "/DMODiabeticDiagnosis.txt"), delim = "|")
 
-medical_history <- read_delim(paste0(file_path, "/DMOMedicalHistory.txt"), delim = "|")
+# Proportion with any >12 weeks by year of treatment
+
+# Baseline characteristics of those with any >12 weeks by year of treatment
+
+
+# Would be useful to look at characteristics at start of year of treatment
+
+
+clinical <- emr_tables$DMOClinicalFindings
+
+co_pathology <- emr_tables$DMOCoPathology
+
+co_pathology %>% 
+  group_by(PatientID, EyeCode) %>% 
+  count()
+
+diabetic_diagnosis <- emr_tables$DMODiabeticDiagnosis
+
+medical_history <- emr_tables$DMOMedicalHistory
   
 # diabetic_diagnosis %>% select(-ExtractDate, -EncounterID) %>% count(DiabetesTypeDesc, AgeDiagnosed) %>% print(n=Inf)
 
@@ -208,5 +246,14 @@ indiv <- eye %>%
   
 
 
+# Years observed and years treated
+eye %>% 
+  summarise(across(c(years_observed, years_treated), sum))
+  
 
-
+# Check observation periods
+# Note that for many patients the observation period is longer.
+# This may be because they have now finished treatment.
+# eye %>% 
+#   ggplot(aes(x = years_observed, y = years_treated)) +
+#   geom_point()
