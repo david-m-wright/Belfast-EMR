@@ -5,8 +5,8 @@ library(lubridate)
 library(rprojroot)
 library(eye)
 library(TraMineR)
-# Conflicted?
-
+library(conflicted)
+conflict_prefer("filter", "dplyr")
 
 source(find_rstudio_root_file("code/EMR-helper-functions.R"))
 
@@ -14,12 +14,22 @@ source(find_rstudio_root_file("code/EMR-helper-functions.R"))
 
 file_path <- find_rstudio_root_file("data/DMO data") 
 
-#  Load patient details
-patients <- read_delim(paste0(file_path, "/DMOPatientDetails.txt"), delim = "|")
+# Load input files
+emr_tables <- list.files(path = file_path, full.names = T) %>% 
+  set_names(., str_remove(basename(.), "\\.txt")) %>%
+  map(~read_delim(., delim = "|"))
 
-diagnoses <- read_delim(paste0(file_path, "/DMODiagnoses.txt"), delim = "|")
+# Description of the input files
+emr_tables_desc <- read_csv(find_rstudio_root_file("study_design/Belfast-EMR-table-descriptions.csv")) %>% 
+  mutate(across(`Table name`, str_replace, "^BEL", "DMO"))
+
+# Pre-process records
+
+# Patient details
+patients <- emr_tables$DMOPatientDetails
 
 # DMO diagnosis
+diagnoses <- emr_tables$DMODiagnoses
 diagnoses %>% 
   count(DiagnosisDescription, str_detect(DiagnosisICD10Code, "H35.81")) %>% print(n=Inf)
 
@@ -32,10 +42,10 @@ diagnoses %>%
   print(n=Inf)
 
 # DMO encounters
-dmo_encounters <- read_delim(paste0(file_path, "/DMOEncounters.txt"), delim = "|")
+dmo_encounters <- emr_tables$DMOEncounters
 
 # Visual acuity
-visual_acuity <- read_delim(paste0(file_path, "/DMOVisualAcuity.txt"), delim = "|") %>% 
+visual_acuity <- emr_tables$DMOVisualAcuity %>% 
   # Converting visual acuity to ETDRS 
   mutate(cleaned_etdrs = if_else(str_detect(RecordedNotation, "LETTERSCORE"), 
                                  as.character(va(RecordedNotationBestMeasure, from = "etdrs", to = "etdrs")), as.character(NA)),
@@ -56,37 +66,37 @@ visual_acuity <- read_delim(paste0(file_path, "/DMOVisualAcuity.txt"), delim = "
                                          as.character(va(RecordedNotationBestMeasure, from = "snellendec", to = "logmar"))),
          va_logmar = as.numeric(coalesce(cleaned_logmar, snellen_to_logmar, etdrs_to_logmar))) 
 
+visual_acuity %>% 
+  count(PatientID, EyeCode, EncounterID) %>% 
+  filter(n>1)
+
 # Injections
-injections_raw <- read_delim(paste0(file_path, "/DMOInjections.txt"), delim = "|") %>% 
-  filter(AntiVEGFInjection == 1) %>% 
-  # Remove a small number of duplicate encounters on the same date
-  group_by(PatientID, EyeCode, EncounterDate) %>% 
+injections_raw <- emr_tables$DMOInjections %>% 
+  # Exclude non anti-VEGF injections
+  mutate(exclude_not_antiVEGF = AntiVEGFInjection != 1) %>% 
+  # Exclude a small number of duplicate encounters on the same date so only one injection per eye per date
+  group_by(PatientID, EyeCode, EncounterDate, exclude_not_antiVEGF) %>% 
   summarise(row_number = row_number(), 
             EncounterID = EncounterID[row_number==1], .groups = "drop") %>% 
-  filter(row_number == 1) %>% 
-  select(-row_number) %>% 
-
-  # Added visual acuity at the same encounter
-  left_join(visual_acuity %>% 
-            select(PatientID, EyeCode, EncounterID, va_etdrs, va_logmar),
-            by = c("PatientID", "EyeCode", "EncounterID")) %>% 
-  
-  # Remove some more duplicate encounters so only one injection per eye per date
-  group_by(PatientID, EyeCode, EncounterDate, va_etdrs, va_logmar) %>% 
-  summarise(row_number = row_number(), .groups = "drop") %>% 
-  filter(row_number == 1) %>% 
+  mutate(exclude_duplicate_encounter = row_number != 1) %>% 
   select(-row_number) 
+
+injections_clean <- injections_raw %>% 
+  filter(!exclude_not_antiVEGF, !exclude_duplicate_encounter) %>% 
   
-
-
-
+  # Add visual acuity at the selected encounter
+  left_join(visual_acuity %>%
+              select(PatientID, EyeCode, EncounterID, va_etdrs, va_logmar),
+            by = c("PatientID", "EyeCode", "EncounterID")) 
       
 ## Assemble cohort (eye level) ##
 
+
 # Injection history summary by eye
-# Find date of first injection (IndexDate) and final injection
-# and number of injections for each eye
-injection_summary_eye  <- injections_raw %>% 
+injection_summary_eye  <- injections_clean %>% 
+  
+  # Find date of first injection (IndexDate) and final injection
+  # and number of injections for each eye
   group_by(PatientID, EyeCode) %>% 
   summarise(index_date = min(EncounterDate),
             final_injection_date = max(EncounterDate), 
@@ -97,7 +107,7 @@ injection_summary_eye  <- injections_raw %>%
 
 # DMO diagnosis history of each eye
 # Find most recent diagnosis preceding each injection
-DMO_history_eye <- injections_raw %>% 
+DMO_history_eye <- injections_clean %>% 
   left_join(diagnoses %>% 
                filter(DiagnosisICD10Code == "H36.0 + E14.3") %>% 
                distinct(PatientID, DateofDiagnosis, EyeCode),
@@ -127,7 +137,7 @@ eye_raw <- patients %>%
             by = c("PatientID" = "PatientID", "EyeCode" = "EyeCode", "index_date" = "EncounterDate")) %>% 
   
   # Add visual acuity at baseline
-  left_join(injections_raw %>% 
+  left_join(injections_clean %>% 
               rename("ETDRS letters" = va_etdrs),
             by = c("PatientID","EyeCode", "index_date" = "EncounterDate")) %>% 
   
@@ -148,14 +158,16 @@ eye_raw <- patients %>%
                                 labels = c("<33 letters", "33-73 letters", ">73 letters"), include.lowest = T), 
                                 na_level = "Missing"))
 
+
 # Apply the exclusion criteria
 eye <- eye_raw %>% 
   filter(!exclude_age, !exclude_no_intervals)
 
 # Just the injections relating to selected eyes
-injections <- injections_raw %>% 
+injections <- injections_clean %>% 
   inner_join(eye %>% 
                select(PatientID, EyeCode, index_date), by = c("PatientID", "EyeCode")) 
+
 
 ## Calculate treatment intervals for the cohort ##
 
