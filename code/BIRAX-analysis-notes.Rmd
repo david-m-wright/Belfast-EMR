@@ -27,24 +27,18 @@ source(find_rstudio_root_file("Code/assemble-BIRAX-data.R"))
 
 # Pre-processing 
 
-The data structure is defined in the files `Medisoft Medical Retina Study - Data Dictionary v1.0.xls` and `Medisoft Medical Retina Study - OCT Thickness Metrics Data Dictionary-14-May-2020` and a total of `r length(emr_table_list)` separate pipe delimited files were provided (Table \@ref(tab:table-descriptions)). Bullet points describe operations performed on the data. 
+The data structure is defined in the files `Medisoft Medical Retina Study - Data Dictionary v1.0.xls` and `Medisoft Medical Retina Study - OCT Thickness Metrics Data Dictionary-14-May-2020` and a total of `r nrow(emr_table_list)` separate pipe delimited files were provided (Table \@ref(tab:table-descriptions)). Bullet points describe operations performed on the data. 
 
 ```{r table-descriptions}
-tibble(`Table name` = names(emr_tables),
-       Rows = map_dbl(emr_tables, nrow),
-       Columns = map_dbl(emr_tables, ncol)) %>% 
-  mutate(`Table number` = row_number()) %>% 
-  inner_join(emr_tables_desc, by = "Table name") %>% 
-  select(`Table number`, everything()) %>% 
+emr_table_list %>% 
   kbl(caption = "Description of input data files.") %>% 
   kable_paper()
 ```
 
-The following steps were taken to pre-process the data. 
 
 ## BELClinicalFindings table
 
-Detailed clinical findings \@ref(tab:clinical-findings) are not currently used in the analysis.
+Detailed clinical findings (Table \@ref(tab:clinical-findings)) are not currently used in the analysis.
 
 ```{r clinical-findings}
 clinical %>% 
@@ -62,7 +56,7 @@ The date of diagnosis of various ocular co-pathologies was recorded in this tabl
 ```{r co-pathology}
 copath %>% 
   filter(CoPathologyDesc != "None") %>% 
-  count(CoPathologyDesc) %>% 
+  count(CoPathologyCode, CoPathologyDesc) %>% 
   arrange(desc(n)) %>%
   kbl(caption = "Distribution of ocular co-pathologies (eye level records).") %>% 
   kable_paper()
@@ -82,7 +76,7 @@ copath %>%
 This table has information on diabetes diagnoses for patients in the dataset.
 
 * Identified the diabetes type and age diagnosed for each patient. For those with more than one type recorded, the most commonly recorded type was taken. It was assumed that those with an unknown diabetic status (i.e. did not appear in this table) did not have diabetes.
-* Derived an indicator variable for any type of diabetes `Diabetes` (Table \@tab:diabetes)).
+* Derived an indicator variable for any type of diabetes `Diabetes` (Table \@ref(tab:diabetes)).
 
 
 ```{r diabetes}
@@ -96,38 +90,41 @@ diabetes %>%
 
 ## BELDiagnosis table
 
-A table of all diagnoses recorded in the system at any time for any patient within the cohort (Table \@tab:diagnoses)).
+A table of all diagnoses recorded in the system at any time for any patient within the cohort (Table \@ref(tab:diagnoses)).
 
 ```{r diagnoses}
 diagnoses %>% 
   count(DiagnosisCategoryDesc, DiagnosisDescription) %>% 
-  slice_sample(n = 5) %>% 
+  # slice_sample(n = 5) %>% 
   arrange(DiagnosisCategoryDesc, desc(n)) %>% 
      # write_csv(file = "GRIP-diagnosis-lookup.csv")
   kbl(caption = "Examples of diagnoses. Multiple records per patient.") %>% 
   kable_paper()
+
 ```
 
 ## BELDRAssessment table
 
-This table lists DR Assessment outcomes for any patient within the cohort (Table \@tab:DR-assessment)).
+This table lists DR Assessment outcomes for any patient within the cohort (Table \@ref(tab:DR-assessment)).
 
 ```{r DR-assessment}
 dr_assessment %>% 
   count(DRAssessmentTypeDesc, DRAssessmentDesc) %>% 
   arrange(desc(n)) %>% 
-  kbl(caption = "Distribution of DR assessment outcomes. Multiple records per patient.")
+  kbl(caption = "Distribution of DR assessment outcomes. Multiple records per patient.") %>% 
+  kable_paper()
 ```
 
 ## BELDRGrading
 
-This table lists DR Grading outcomes for any patient within the cohort (Table \@tab:DR-grading)).
+This table lists DR Grading outcomes for any patient within the cohort (Table \@ref(tab:DR-grading)).
 
 ```{r DR-grading}
 dr_grading %>% 
   count(DRGradeDesc) %>% 
   arrange(desc(n)) %>% 
-  kbl(caption = "Distribution of DR grades. Multiple records per patient.")
+  kbl(caption = "Distribution of DR grades. Multiple records per patient.") %>% 
+  kable_paper()
 ```
 
 
@@ -149,9 +146,18 @@ A table of ocular injections at any time for any patient within the cohort.
 
 * Removed `r nrow(filter(injections_raw, exclude_not_antiVEGF))` injections that were not for anti-VEGF agents.
 * Removed `r nrow(filter(injections_raw, !exclude_not_antiVEGF, exclude_duplicate_encounter))` duplicate injection entries.   
-* Added visual acuity measurements to the corresponding injection record.
+* Added visual acuity (VA) measurements to the corresponding injection record.
 
-A total of `r nrow(injections_clean)` injection records remained.
+A total of `r nrow(injections_clean)` injection records remained (Table \@ref(tab:injections)).
+
+```{r injections}
+injections_clean %>% 
+  count(InjectedDrugDesc) %>% 
+  arrange(desc(n)) %>% 
+  kbl(caption = "Distribution of injections by drug type.") %>% 
+  kable_paper()
+```
+
 
 
 ## BELInvestigations table
@@ -250,7 +256,7 @@ surgery %>%
 
 This table lists ndications for surgery (primary diagnosis) for any patient within the cohort (Table \@ref(tab:surgery-ind))
 
-```{r surgery_ind}
+```{r surgery-ind}
 surgery_ind %>% 
   count(IndicationDesc) %>% 
   arrange(desc(n)) %>% 
@@ -261,18 +267,22 @@ surgery_ind %>%
 
 ## BELVisualAcuity table
 
-This table records visual acuity measurements, which had a right skewed distribution (Figure \@ref(fig:va-dist). 
-
+This table records visual acuity measurements, which had a right skewed distribution (Figure \@ref(fig:va-dist)). 
 * Conversion of visual acuity measurements to both ETDRS and logMAR formats.   
+* Categorisation of visual acuity based on ETDRS letters (3 categories, calculations on letters).   
+* Categorisation of visual acuity into 4 Snellen categories (calculations in logMAR units).   
+
 
 ```{r va-dist, fig.cap="Distribution of visual acuity. Multiple records per eye."}
-ggplot(visual_acuity, aes(x = va_logmar)) +
+visual_acuity %>% 
+  filter(!is.na(va_logmar)) %>% 
+ggplot(aes(x = va_logmar)) +
   geom_histogram(bins = 30) +
   theme_light() +
   labs(x = "Visual acuity (logMAR)", y = "Count")
 ```
 
-### OCT_ThicknessMetrics
+## OCT_ThicknessMetrics
 
 This table gives computed retinal thickness metrics derived from OCT scans. Thicknesses and volumes are given for each of the 9 regions in the ETDRS grid (Table \@ref(tab:oct-thickness)).
 
@@ -288,65 +298,157 @@ oct_thickness %>%
 
 # Cohort construction
 
-Data were extracted on `r as.Date(max(patients$ExtractDate))`. A proportion of event dates were after the recorded `ExtractDate`. For example, in the `Encounters` table `r nrow(filter(encounters, EncounterDate > ExtractDate))` records had an `EncounterDate` after the `ExtractDate`. This is related to the date perturbation used to maintain patient anonymity.
+Data were extracted on `r as.Date(max(patients$ExtractDate))`. A proportion of event dates were after the recorded `ExtractDate`. For example, in the `Encounters` table `r nrow(filter(encounters, EncounterDate > ExtractDate))` records had an `EncounterDate` after the `ExtractDate`. This is related to the date perturbation used by Medisoft to maintain patient anonymity in the extract.
 
-The following steps were taken to pre-process the data:   
+The following steps were taken to process the data:   
+
+Injections   
 
 * Removal of a small number of injections that were not for anti-VEGF agents.
 * Removal of a small number of duplicate injection entries.   
-* Added visual acuity measures for each injection record.   
 * Identification of the first injection recorded for each eye and the date (the index date).   
-* Calculation of patient ages at the index date and at study period end and total observation period for each patient.   
-* Conversion of visual acuity measurements to both ETDRS and logMAR formats.   
 * Calculation of treatment intervals.   
+
+Patient demographics    
+
+* Calculation of patient ages at the index date and at study period end and total observation period for each eye.   
+
+Visual acuity
+
+* Conversion of visual acuity measurements to both ETDRS and logMAR formats.   
+* Categorisation of visual acuity into 4 Snellen categories (calculations in logMAR units).   
+* At each VA measurement calculate VA change (logMAR and ETDRS) since the baseline (index date).    
+* Categorise VA change since baseline in ETDRS lines (calculations in logMAR units)).  
+* Identification of the closest VA measurements to each time point of interest during treatment.   
+
+Diagnoses   
+
+* Identification of eyes with a diagnosis of AMD (`CoPathologyCode` "R316" or "R337" in Table \@ref(tab:co-pathology), or DiagnosisDescription containing "AMD" or "age-related macular degeneration" in Table \@ref(tab:diagnoses). Those with "suspected AMD" or "dry AMD" at first diagnosis were excluded (those developing dry AMD later were not excluded)).   
+* Identification of eyes with a diagnosis of retinal vein or artery occlusions (RVO).   
+* Identification of eyes with a diagnosis of diabetic macular oedema (DMO) or diabetic retinopathy (DR)  (`CoPathologyCode` "R318" in Table \@ref(tab:co-pathology) or `DiagnosisDescription` contining "diabetic macular oedema" in Table \@ref(tab:diagnoses) or any features found in Table \@ref(tab:DR-assessment)).   
 
 
 ## Inclusion and exclusion criteria
 
-Data were extracted by Medisoft with the following inclusion  and  exclusion criteria. 
+Data were extracted by Medisoft with the following inclusion and  exclusion criteria. 
 
 Inclusion: "Any patient having attended the BHSCT macular treatment service at least once during the period May 2008 to May 2018 with a diagnosis of AMD, DR/DMO or RVO."   
 Exclusion: "Any patient marked as a test patient."
 
 EMR for a total of `r nrow(patients)` patients were included in the extracted dataset, with `r nrow(injections_raw)` records of anti-VEGF injections. The unit of analysis is the eye so criteria were applied at the eye level:   
 
-* `r nrow(eye_raw)` eyes received at least one anti-VEGF injection.   
-* `r nrow(filter(eye_raw, exclude_age))` eyes were in patients aged <18 at the index date.
-* `r nrow(filter(eye_raw, !exclude_age, exclude_no_intervals))` eyes that received no injections after the index date were excluded.
+* The raw data contained `r nrow(eye_raw)` eyes.   
+* `r nrow(filter(eye_raw, exclude_no_AMD))` eyes had no diagnosis of age-related macular degeneration and were excluded. 
+* `r nrow(filter(eye_raw, !exclude_no_AMD, exclude_age))` eyes were in patients aged <50 at the index date and were excluded.
+* `r nrow(filter(eye_raw, !exclude_no_AMD, !exclude_age,  exclude_lt3_injections))` eyes had fewer than three anti-VEGF injections during the study period  and were excluded.   
+* `r nrow(filter(eye_raw, !exclude_no_AMD, !exclude_age,  !exclude_lt3_injections, exclude_RVO))` eyes had a diagnosis of RVO at any point during the study period and were excluded.   
+* `r nrow(filter(eye_raw, !exclude_no_AMD, !exclude_age,  !exclude_lt3_injections, !exclude_RVO, exclude_DR_DMO))` eyes had a diagnosis of DMO/DR at any point during the study period and were excluded.   
+* `r nrow(filter(eye_raw, !exclude_no_AMD, !exclude_age,  !exclude_lt3_injections, !exclude_RVO, !exclude_DR_DMO, exclude_no_va))` eyes did not have a visual acuity assessment within +- 1 month of the index date and were excluded.   
 
-A total of `r nrow(eye)` eyes from `r nrow(distinct(eye, PatientID))` patients remained after these exclusions. A total of `r as.integer(sum(eye$total_intervals))` treatment intervals were observed (between injections). 
+
+A total of `r nrow(eye)` eyes from `r nrow(distinct(eye, PatientID))` patients remained after these exclusions. A total of `r nrow(injections)` injections were observed for the cohort, allowing `r nrow(treatment_intervals)` treatment intervals to be observed (between injections). 
+
 
 # Descriptive statistics
 
+Descriptive statistics for the eyes included in the analysis are given in Tables \@ref(tab:descriptives). Statistics are presented at the eye level as some patients were treated in both eyes, with treatment starting at different times. Table \@ref(tab:va-descriptives) gives visual acuity outcomes at the times of interest listed in Table \@ref(tab:snapshots). The distribution of OCT assessments, injections and injection intervals are given by treatment year in Tables \@ref(tab:oct-by-year), \@ref(tab:injections-by-year) and \@ref(tab:injection-intervals-by-year).
+
 ```{r descriptives}
-# indiv %>% 
-#   transmute(Age = index_age, Gender, Treated, Individuals = " ") %>% 
-#   GenerateDescriptives(type = c(Age = "Median (Range)")) %>% 
-#   kbl(caption = "Baseline demographics and characteristics of patients with DMO. Frequency and percentage reported for categorical variables.") %>% 
-#   kable_paper()
-
-```
-
-```{r va-baseline}
-eye %>% 
-  select(`ETDRS letters`,`ETDRS category`) %>% 
-  mutate(Eyes = " ") %>% 
-  GenerateDescriptives() %>% 
-  kbl(caption = "Visual acuity at baseline.") %>% 
+eye %>%
+  transmute(Age = index_age, Gender, Eyes = " ") %>%
+  GenerateDescriptives(type = c(Age = "Mean (Range)")) %>%
+  kbl(caption = "Baseline demographics of eyes with AMD. Frequency and percentage reported for categorical variables.") %>%
   kable_paper()
 ```
-# Treatment sequences
 
-```{r treatment-intervals, fig.cap= "Treatment sequences for a sample of eyes.", fig.height = 7}
-treatment_intervals %>% 
-  filter(PatientID %in% sample(PatientID, 30)) %>% 
-  ggplot(aes(x = treatment_interval_weeks, y = sequence_id, group = sequence_id, fill = `Treatment interval`)) +
-  geom_col(colour = "white") +
-  theme_light() +
-  scale_x_continuous(breaks = seq(0, 312, by = 52)) +
-  labs(x = "Weeks since index injection", y = "Sequence ID")
+There was a pattern of slight improvements in visual acuity by the end of the first year of treatment (Table \@ref(tab:va-descriptives)). This was followed by a steady decline in the subsequent years, with mean VA returning to baseline levels between years 3 and 4 and declining further in the remaining years. 
+
+```{r va-descriptives}
+va_history %>% 
+  filter(snapshot) %>%
+  transmute(follow_up_year, va_logmar, va_change_logmar, va_etdrs, va_change_etdrs, va_change_lines, va_category_snellen, Eyes = "n") %>% 
+  GenerateDescriptives(col_var = follow_up_year,
+                       type = c(va_logmar = "Mean (Range)", va_etdrs = "Median (IQR)", va_change_etdrs = "Median (IQR)")) %>%
+  left_join(var_desc, by = "Variable") %>%
+   mutate(Description = coalesce(Description, Variable)) %>%
+  select(Description, everything(), -Variable) %>%
+  kbl(caption = "Distribution of visual acuity outcomes at the end of each year of anti-VEGF treatment. '0' indicates baseline measurements.") %>% 
+  kable_paper()
 ```
-## Features of the data
 
-Sequences of VA measurements are long.
+```{r snapshots}
+snapshots %>% 
+  transmute(`Follow up time (years)` = follow_up_year, `Acceptable tolerance (months)` = tolerance) %>% 
+  kbl(caption = "Time points of interest during anti-VEGF treatment for AMD. Tolerance indicates the maximum distance from the point of interest within which a measurement would be included in analysis.") %>% 
+  kable_paper()
+```
+
+Frequency of both OCT exams and injections decreased with each year of treatment (Tables \@ref(tab:oct-by-year) and \@ref(tab:injections-by-year)), corresponding to modest increases in the proportion of eyes with at least one treatment interval > 80 days in each year of treatment (Table \@ref(tab:injection-intervals-by-year)). Patients may/may not have received an OCT/injection in a given year, so different denominators are used in each of these tables, none of which gives the total number of eyes under treatment (this could be calculated from the overall injection history records).
+
+```{r oct-by-year}
+bind_rows(
+    oct_history %>% 
+      count(PatientID, EyeCode, treatment_year, name = "OCT exams") %>% 
+      inner_join(snapshots %>% 
+                   filter(follow_up_year != "0"), by = c("treatment_year" = "follow_up_year")) %>% 
+      mutate(`Received` = if_else(`OCT exams` < 5, "<5 per year", ">=5 per year"),
+             Eyes = " ") %>% 
+      select(treatment_year,  `OCT exams`, Received, Eyes) %>% 
+      GenerateDescriptives(col_var = treatment_year),
+    
+    oct_history %>% 
+      transmute(treatment_year, `Total OCT exams` = " ") %>% 
+      inner_join(snapshots %>% 
+                   filter(follow_up_year != "0") %>% select(follow_up_year), by = c("treatment_year" = "follow_up_year")) %>% 
+      GenerateDescriptives(col_var = treatment_year)
+  ) %>% 
+    kbl(caption = "Distribution of OCT exams received by year of anti-VEGF treatment.") %>% 
+    kable_paper()
+```
+
+
+```{r injections-by-year}
+bind_rows(
+  injections %>% 
+  count(PatientID, EyeCode, treatment_year, name = "Injections") %>% 
+  inner_join(snapshots %>% 
+                   filter(follow_up_year != "0"), by = c("treatment_year" = "follow_up_year")) %>% 
+  mutate(`Received` = if_else(Injections < 5, "<5 per year", ">=5 per year"),
+    Eyes = " ") %>% 
+  select(treatment_year,  Injections, Received, Eyes) %>% 
+  GenerateDescriptives(col_var = treatment_year),
+
+  injections %>% 
+  transmute(treatment_year, `Total injections` = " ") %>% 
+    inner_join(snapshots %>% 
+                   filter(follow_up_year != "0") %>% select(follow_up_year), by = c("treatment_year" = "follow_up_year")) %>% 
+  GenerateDescriptives(col_var = treatment_year)
+) %>% 
+  kbl(caption = "Distribution of injections received by year of anti-VEGF treatment.") %>% 
+  kable_paper()
+```
+
+```{r injection-intervals-by-year}
+bind_rows(
+    treatment_intervals %>% 
+      group_by(PatientID, EyeCode, treatment_year) %>% 
+      summarise(`Treatment intervals` = n(), 
+                interval_gt80 = any(treatment_interval_days > 80), .groups = "drop") %>% 
+      inner_join(snapshots %>% 
+                   filter(follow_up_year != "0"), by = c("treatment_year" = "follow_up_year")) %>% 
+      mutate(`Extended interval (>80 days)` = if_else(interval_gt80, "Yes", "No"),
+             Eyes = " ") %>% 
+      select(treatment_year, `Treatment intervals`,  `Extended interval (>80 days)`, Eyes) %>% 
+      GenerateDescriptives(col_var = treatment_year),
+    
+    treatment_intervals %>% 
+      transmute(treatment_year, `Total treatment intervals` = " ") %>% 
+      inner_join(snapshots %>% 
+                   filter(follow_up_year != "0")%>% 
+                   select(follow_up_year), by = c("treatment_year" = "follow_up_year")) %>% 
+      GenerateDescriptives(col_var = treatment_year)
+  ) %>% 
+    kbl(caption = "Distribution of treatment intervals by year of anti-VEGF treatment. Intervals were assigned to years based on where the start of the treatment interval fell.") %>% 
+    kable_paper()
+```
 

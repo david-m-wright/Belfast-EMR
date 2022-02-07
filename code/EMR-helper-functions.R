@@ -92,6 +92,27 @@ SummariseMedianRange <- function(x, output_n = F, sig_digits = 1){
   }
 }
 
+# Function to calculate mean and range for continuous variables
+# Args: x = numeric vector to summarise
+# output_n = logical indicating whether to return the number of non-missing cases in square brackets
+# sig_digits = number of significant digits to report
+SummariseMeanRange <- function(x, output_n = F, sig_digits = 1){
+  mean_range <- paste0(signif(mean(x, na.rm = T), digits = sig_digits), 
+                         " (", 
+                         signif(min(x, na.rm = T), digits = sig_digits), 
+                         ", ",
+                         signif(max(x, na.rm = T), digits = sig_digits), 
+                         ")")
+  if(output_n) {
+    paste0(mean_range, " [", 
+           sum(!is.na(x)),
+           "]")
+  } else {
+    mean_range
+  }
+}
+
+
 # Function to generate a frequency table for a discrete variable (n, %),
 # optionally cross tabulated by a second variable
 # Args: data = data.frame containing data to tabulate
@@ -148,6 +169,7 @@ GenerateDescriptives <- function(data, col_var = NULL, type = NULL, sig_digits =
                              summarise(n = switch(.y,
                                                   `Median (IQR)` = SummariseMedianIQR(.data[[.x]], sig_digits = sig_digits, output_n = output_n),
                                                   `Median (Range)` = SummariseMedianRange(.data[[.x]], sig_digits = sig_digits, output_n = output_n),
+                                                  `Mean (Range)` = SummariseMeanRange(.data[[.x]], sig_digits = sig_digits, output_n = output_n),
                                                   SummariseSD(.data[[.x]], sig_digits = sig_digits, output_n = output_n)),
                                        .groups = "drop") %>%
                              mutate(Value = "Value") %>%
