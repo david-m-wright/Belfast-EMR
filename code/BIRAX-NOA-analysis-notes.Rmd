@@ -1,0 +1,97 @@
+---
+title: "BIRAX study - NOA analysis Notes"
+author: "David M Wright - d.wright@qub.ac.uk"
+date: "Document compiled: `r Sys.Date()`"
+output: 
+  bookdown::html_document2:
+     toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(knitr)
+library(kableExtra)
+library(rprojroot)
+library(skimr)
+```
+
+`r R.version.string`   
+
+# Introduction
+
+This analysis is of performance of the Notal Ophthalmic Analyser (NOA) software to analyse Optical Coherence Tomography (OCT) scans taken of AMD patients at the Belfast Health and Social Care Trust Macular Service. The aim of the study is to compare the NOA outputs regarding AMD lesion activation (i.e. presence of intra-retinal fluid or sub-retinal fluid, IRF and SRF) with the clinical treatment decisions made, as recorded in Electronic Medical Records (EMR).
+
+
+```{r run-analysis, include=FALSE}
+source(find_rstudio_root_file("Code/assemble-BIRAX-data.R"))
+```
+
+
+# Pre-processing 
+
+The NOA was run on a heterogeneous collection of OCT scans of various sizes and resolutions, including those of patients with DMO and other exudative retinopathies, over 300,000 scans in total. OCT scans were captured on the Heidelberg Spectralis platform and were extracted and anonymised by the EMR provider (Medisoft) before transfer to the research team. Extracted volume scans were provided in two formats, sets of 2D B-scan images (bmp), and videos stitched together from the component B-scans (AVI). The NOA was run on AVI files. Current progress of the NOA in terms of scans processed is summarised in Table \@ref(tab:noa-logs). Unsuccessful scans were those that could not be processed by the NOA and were discarded. Reasons for unsuccessful processing are given in Table \@ref(tab:noa-unsuccessful). Successful scans were labelled by eligibility for inclusion in the analysis. Ineligible scans were those where the NOA outputs are likely to be unreliable. 
+
+```{r noa-logs}
+noa_log %>% 
+  kbl(caption = "Progress of the NOA software in processing OCT scans.") %>% 
+  kable_paper()
+```
+```{r noa-unsuccessful}
+tabyl(noa_unsuccessful, Details) %>% 
+   adorn_totals() %>% 
+   adorn_pct_formatting() %>% 
+      kbl(caption = "Reasons given for unsuccessful NOA analysis.") %>% 
+      kable_paper()
+```
+
+## NOA output
+
+The NOA output data structure is defined in the file `NOA_Dictionary.xls` supplied by Notal Vision. Briefly, the presence or absence of IRF and SRF is indicated, along with volume measurements if fluid is detected, in regions defined according to the ETDRS grid.
+
+Bullet points describe operations performed on the data. 
+
+* Patient and eye identifiers extracted from `FileName` column.   
+* Where multiple scans were taken for the same eye on the same day, select a single scan by applying the following criteria, breaking ties with the next criterion on the list:   
+   + Scan with the fewest missing values, indicating a more successful NOA analysis.   
+   + Scan with the largest number of B-scans (`FrameNum`).   
+   + Last scan taken on that day.    
+   
+
+# Cohort construction
+
+Construction of the main study cohort has been previously described in `BIRAX-analysis-notes-yyyy-mm-dd.html`. It consists of eyes receiving anti-VEGF treatment for neovascular AMD.
+
+For this analysis, the entry date for each cohort member was the date of the first anti-VEGF injection (the index date).
+The exit date for each cohort member was the date of the last recorded clinic visit (technically the end interval is left open). Note that this is different to the study period for the injection interval analysis, which only considers injection visits and ends at the date of the last injection.
+
+Each OCT scan was matched to a clinic visit. The primary outcome was whether an injection was administered or not at that visit. This analysis considers the predictive ability of the metrics produced by the NOA in predicting injection, the main metrics of interest being the presence, volume and location of IRF and SRF. 
+
+
+## Inclusion and exclusion criteria
+
+There were `r nrow(eye)` eyes from `r nrow(distinct(eye, PatientID))` patients in the original study cohort.
+
+* `r nrow(eye) - nrow(eye_oct)` eyes were excluded because there were no matching OCT scans for any visit.
+
+A total of `r nrow(eye_oct)` eyes from `r nrow(distinct(eye_oct, PatientID))` patients remained after these exclusions. There was a total of `r nrow(oct_visits)` visits in which OCT scans were taken.
+
+# Descriptive statistics
+
+Descriptive statistics for the eyes included in the analysis are given in Tables \@ref(tab:descriptives). Statistics are presented at the eye level as some patients were treated in both eyes, with treatment starting at different times. 
+
+```{r descriptives}
+eye_oct %>%
+  transmute(Age = index_age, Gender, Eyes = " ") %>%
+  GenerateDescriptives(type = c(Age = "Mean (Range)")) %>%
+  kbl(caption = "Baseline demographics of eyes with AMD. Frequency and percentage reported for categorical variables.") %>%
+  kable_paper()
+```
+
+
+
+
+# To do
+Secondary outcomes - does fluid volume correlate with VA?
+Would there be a benefit to extending the analysis to before the first injection? i.e. to look at whether OCT indicates possible treatment outcomes later.
+Secondary analysis - how does NOA segmentation correlate with Heidelberg segmentation for each of the ETDRS regions?
+To check - would there have been imaging only appointments or would all contain the possibility of injection on the same day?

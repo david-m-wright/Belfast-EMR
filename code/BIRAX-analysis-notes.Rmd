@@ -130,7 +130,11 @@ dr_grading %>%
 
 ## BELEncounters table
 
-This table lists the types of patient visits (Table \@ref(tab:encounters)).
+This table lists the types of patient encounters (Table \@ref(tab:encounters)). A patient may have multiple encounters on a single visit to the clinic, one with each healthcare professional (e.g. nurse, doctor).    
+
+* Removed `r nrow(filter(encounters_raw, ClinicalCategoryDesc != "Medical retina"))` encounters from clinics other than medical retina (the Medisoft extract included information drawn from glaucoma, cataract and other clinics).   
+* Removed `r nrow(filter(encounters_raw, ClinicalCategoryDesc == "Medical retina", !EncounterTypeCode %in% c("SCLV", "NCLV", "OPER")))` encounters of types other than the three major types for medical retina (nurse, doctor, operation).   
+
 
 ```{r encounters}
 encounters %>% 
@@ -267,7 +271,8 @@ surgery_ind %>%
 
 ## BELVisualAcuity table
 
-This table records visual acuity measurements, which had a right skewed distribution (Figure \@ref(fig:va-dist)). 
+This table records visual acuity measurements, which had a right skewed distribution (Figure \@ref(fig:va-dist)).   
+    
 * Conversion of visual acuity measurements to both ETDRS and logMAR formats.   
 * Categorisation of visual acuity based on ETDRS letters (3 categories, calculations on letters).   
 * Categorisation of visual acuity into 4 Snellen categories (calculations in logMAR units).   
@@ -433,12 +438,14 @@ bind_rows(
     treatment_intervals %>% 
       group_by(PatientID, EyeCode, treatment_year) %>% 
       summarise(`Treatment intervals` = n(), 
-                interval_gt80 = any(treatment_interval_days > 80), .groups = "drop") %>% 
+                interval_gt80 = any(treatment_interval_days > 80),
+                interval_leq40 = any(treatment_interval_days <= 40), .groups = "drop") %>% 
       inner_join(snapshots %>% 
                    filter(follow_up_year != "0"), by = c("treatment_year" = "follow_up_year")) %>% 
       mutate(`Extended interval (>80 days)` = if_else(interval_gt80, "Yes", "No"),
+             `Short interval (<=40 days)` = if_else(interval_leq40, "Yes", "No"),
              Eyes = " ") %>% 
-      select(treatment_year, `Treatment intervals`,  `Extended interval (>80 days)`, Eyes) %>% 
+      select(treatment_year, `Treatment intervals`,  `Extended interval (>80 days)`,`Short interval (<=40 days)`, Eyes) %>% 
       GenerateDescriptives(col_var = treatment_year),
     
     treatment_intervals %>% 
