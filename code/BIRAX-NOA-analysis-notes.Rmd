@@ -23,7 +23,7 @@ This analysis is of performance of the Notal Ophthalmic Analyser (NOA) software 
 
 
 ```{r run-analysis, include=FALSE}
-source(find_rstudio_root_file("Code/assemble-BIRAX-data.R"))
+source(find_rstudio_root_file("Code/BIRAX-NOA-analysis.R"))
 ```
 
 
@@ -87,11 +87,171 @@ eye_oct %>%
   kable_paper()
 ```
 
+# NOA measurements
+
+The distribution of NOA measurements by injection status is given in Tables \@ref(tab:general-vs-injections) to \@ref(tab:grid-vs-injections). Tests of association between each measurement and injection status are presented: t-tests for continuous measurements and chi-squared tests for categorical measurements. 
+
+In general, scans taken at visits at which injections were administered were more likely to have fluid and to have greater fluid volumes than scans taken at visits with no injection.
+
+## General scan characteristics
+
+These parameters summarised the general scan characteristics in terms of the number of B-scans taken and the number in which fluid were detected. 
+
+```{r general-vs-injections}
+oct_visits %>% select(injected, all_of(noa_general)) %>% 
+    mutate(Total = "") %>% 
+   GenerateDescriptives(col_var = injected, output_n = TRUE) %>% 
+   left_join(noa_dictionary %>% 
+                 select(Parameter, `Raw Parameter`), 
+              by = c("Variable" = "Raw Parameter")) %>% 
+   relocate(Parameter, .after = Variable) %>% 
+   left_join(SummariseAssocTest(oct_visits, noa_general, injected), by = "Variable") %>% 
+   kbl(caption = "Distribution of general NOA OCT measurements by injection status. Square brackets indicate number of valid measurements.") %>% 
+   kable_paper()
+```
+## Fluid measurements
+
+The presence and volume of IRF, SRF and total retinal fluid (TRF) by injection status is given in Table \@ref(tab:fluid-vs-injections).
+
+```{r fluid-vs-injections}
+oct_visits %>% select(injected, noa_fluid) %>% 
+    mutate(Total = "") %>% 
+   GenerateDescriptives(col_var = injected, output_n = TRUE) %>% 
+   left_join(noa_dictionary %>% 
+                 select(Parameter, `Raw Parameter`), 
+              by = c("Variable" = "Raw Parameter")) %>% 
+   relocate(Parameter, .after = Variable) %>% 
+   left_join(SummariseAssocTest(oct_visits, noa_fluid, injected), by = "Variable") %>% 
+   kbl(caption = "Distribution of NOA OCT fluid measurements by injection status. Square brackets indicate number of valid measurements.") %>% 
+   kable_paper()
+```
+
+## Retinal measurements
+
+Measurements of retinal volume and the presence of vitreo-macula interface or RPE irregularities and detachments by injection status is given in Table \@ref(tab:retinal-vs-injections).
+
+```{r retinal-vs-injections, warning=FALSE}
+oct_visits %>% select(injected, all_of(noa_retinal)) %>% 
+    mutate(Total = "") %>% 
+   GenerateDescriptives(col_var = injected, output_n = TRUE) %>% 
+   left_join(noa_dictionary %>% 
+                 select(Parameter, `Raw Parameter`), 
+              by = c("Variable" = "Raw Parameter")) %>% 
+   relocate(Parameter, .after = Variable) %>% 
+   left_join(SummariseAssocTest(oct_visits, noa_retinal, injected), by = "Variable") %>% 
+   kbl(caption = "Distribution of NOA OCT retinal measurements by injection status. Square brackets indicate number of valid measurements.") %>% 
+   kable_paper()
+```
+
+## ETDRS grid parameters
+
+Measurements of fluid and retinal thickness are given for each of the regions on an ETDRS grid by injection status in Table \@ref(tab:grid-vs-injections).
+
+```{r grid-vs-injections}
+oct_visits %>% select(injected, all_of(noa_grid)) %>% 
+    mutate(Total = "") %>% 
+   GenerateDescriptives(col_var = injected, output_n = TRUE) %>% 
+   left_join(noa_dictionary %>% 
+                 select(Parameter, `Raw Parameter`), 
+              by = c("Variable" = "Raw Parameter")) %>% 
+   relocate(Parameter, .after = Variable) %>% 
+   inner_join(SummariseAssocTest(oct_visits, noa_grid, injected), by = "Variable") %>% 
+   arrange(Variable) %>% 
+   kbl(caption = "Distribution of NOA OCT retinal measurements by ETDRS grid location and injection status. Square brackets indicate number of valid measurements.") %>% 
+   kable_paper()
+```
 
 
+# Diagnostic test characteristics
 
-# To do
-Secondary outcomes - does fluid volume correlate with VA?
-Would there be a benefit to extending the analysis to before the first injection? i.e. to look at whether OCT indicates possible treatment outcomes later.
-Secondary analysis - how does NOA segmentation correlate with Heidelberg segmentation for each of the ETDRS regions?
-To check - would there have been imaging only appointments or would all contain the possibility of injection on the same day?
+One potential application of the NOA is to triage OCT scans, classifying those where injections are likely to be necessary and those where no fluid is detected and treatment is not required.
+
+The diagnostic test characteristics of NOA output measures were calculated. For categorical variables (e.g. presence or absence of SRF), accuracy, sensitivity and specificity were calculated. For continuous variables, Receiver Operating Characteristic (ROC) curves were calculated. Variables are ranked by decreasing accuracy or area under the ROC curve.
+
+
+## General scan characteristics
+
+Of the two general scan characteristics, the number of B-scans with fluid detected had reasonable discrimination (Table \@ref(tab:roc-general)).
+
+
+```{r roc-general, message=FALSE}
+DiagnosticROC(oct_visits, injected, noa_general) %>% 
+left_join(noa_dictionary %>% 
+                 select(Parameter, `Raw Parameter`), 
+              by = c("Variable" = "Raw Parameter")) %>% 
+   relocate(Parameter, .after = Variable) %>% 
+   arrange(desc(AUC)) %>% 
+   kbl(caption = "Diagnostic test characteristics of continuous NOA OCT general measurements.", digits = 3) %>% 
+   kable_paper()
+```
+
+## Fluid measurements
+
+Of the three binary measures of fluid, SRF showed moderate sensitivity (Table \@ref(tab:roc-fluid-binary)). Specificity was good for total fluid. Continuous measures of SRF and TRF had moderate AUC values (Table \@ref(tab:roc-fluid)).
+
+```{r roc-fluid-binary}
+noa_diag_stats %>% 
+   inner_join(noa_dictionary %>% 
+                 select(Parameter, `Raw Parameter`) %>% 
+   filter(`Raw Parameter` %in% noa_fluid),
+   by = c("Variable" = "Raw Parameter")) %>% 
+   relocate(Parameter, .after = Variable) %>% 
+   arrange(desc(accuracy)) %>% 
+   kbl(caption = "Diagnostic test characteristics of binary OCT fluid measurements. P value compares accuracy to no information rate.", digits = 3) %>% 
+   kable_paper()
+```
+
+```{r roc-fluid, message=FALSE}
+DiagnosticROC(oct_visits, injected, noa_fluid) %>% 
+left_join(noa_dictionary %>% 
+                 select(Parameter, `Raw Parameter`), 
+              by = c("Variable" = "Raw Parameter")) %>% 
+   relocate(Parameter, .after = Variable) %>% 
+   arrange(desc(AUC)) %>% 
+   kbl(caption = "Diagnostic test characteristics of continuous NOA OCT fluid measurements.", digits = 3) %>% 
+   kable_paper()
+```
+
+## Retinal measurements
+
+Abnormalities at the vitreo-macular interface had high sensitivity and low specificity. Retinal pigment epithelium detachment showed the opposite pattern (Table \@ref(tab:roc-retinal-binary)). Of the continuous retinal measurements, only average retinal height and retinal volume showed moderate AUC values (Table \@ref(tab:roc-retinal)).
+
+```{r roc-retinal-binary}
+noa_diag_stats %>% 
+   inner_join(noa_dictionary %>% 
+                 select(Parameter, `Raw Parameter`) %>% 
+   filter(`Raw Parameter` %in% noa_retinal),
+   by = c("Variable" = "Raw Parameter")) %>% 
+   relocate(Parameter, .after = Variable) %>% 
+   arrange(desc(accuracy)) %>% 
+   kbl(caption = "Diagnostic test characteristics of binary OCT retinal measurements. P value compares accuracy to no information rate.", digits = 3) %>% 
+   kable_paper()
+```
+
+```{r roc-retinal, message=FALSE}
+DiagnosticROC(oct_visits, injected, noa_retinal) %>% 
+left_join(noa_dictionary %>% 
+                 select(Parameter, `Raw Parameter`), 
+              by = c("Variable" = "Raw Parameter")) %>% 
+   relocate(Parameter, .after = Variable) %>% 
+   arrange(desc(AUC)) %>% 
+   kbl(caption = "Diagnostic test characteristics of continuous NOA OCT retinal measurements.", digits = 3) %>% 
+   kable_paper()
+```
+
+## ETDRS grid parameters
+
+TRF volumes and sub-field thickness in the central, inner nasal, inner inferior and inner temporal ETDRS regions showed the highest discriminative power, with moderate AUC values (Table \@ref(tab:roc-grid)).
+
+
+```{r roc-grid, message=FALSE}
+DiagnosticROC(oct_visits, injected, noa_grid) %>% 
+left_join(noa_dictionary %>% 
+                 select(Parameter, `Raw Parameter`), 
+              by = c("Variable" = "Raw Parameter")) %>% 
+   relocate(Parameter, .after = Variable) %>% 
+   arrange(desc(AUC)) %>% 
+   kbl(caption = "Diagnostic test characteristics of continuous NOA OCT measurements by ETDRS region.", digits = 3) %>% 
+   kable_paper()
+```
+

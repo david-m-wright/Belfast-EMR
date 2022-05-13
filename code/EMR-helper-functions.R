@@ -221,6 +221,39 @@ SummariseChisqTest <- function(dat, var1_list, var2){
 SummariseChisqTest(mtcars, vars(cyl, carb), gear)
 
 
+# Perform association tests for each of a set of continuaous variables
+# Classified by a single discrete variable
+# For numeric variables a two sample t-test will be performed
+# For factors a chi-squared test will be performed
+# var1_list = character vector or vars() specification listing variables to test (rows)
+# var2 = unquoted name of variable to test by (columns)
+SummariseAssocTest <-  function(dat, var1_list, var2){
+  
+  cross_tabs <- if("quosures" %in% class(var1_list)){
+    {{var1_list}}
+  } else {
+    var1_list %>% 
+      syms() 
+  }
+  
+    dat %>% 
+    select(all_of(var1_list)) %>% 
+     map(~if(is.numeric(.)){
+       t.test(. ~ pull(dat, {{var2}}))
+     } else if(is.factor(.)) {
+       stats::chisq.test(x = ., y = pull(dat, {{var2}}))
+     }
+     ) %>%
+      map_dfr(broom::glance, .id = "Variable") %>%
+                      transmute(Variable,
+                                `Test stat` = round(statistic, digits = 2),
+                                df = round(parameter, digits = 1),
+                                P = format.pval(p.value, eps = 0.001, digits = 2))
+}
+
+ # SummariseAssocTest(oct_visits, noa_fluid, injected) 
+# SummariseAssocTest(oct_visits, noa_grid, "injected")
+
 
 
 # Function to display the diagnostic peformance stats of a predictor variable
@@ -250,6 +283,40 @@ DiagnosticStats <- function(dat, response, predictor){
            NPV = TN/(FN+TN))
   
 }
+
+
+# Function to display the diagnostic performance stats of a continuous predictor variable in AUC terms
+# Args:
+# dat = tibble containing data
+# response = column containing response variable
+# predictor_list = character vector or vars() specification listing variables to test (rows)
+# Value: tibble containing the diagnostic stats
+DiagnosticROC <- function(dat, response, predictor_list){
+  # response = enquo(response)
+  # predictor = enquo(predictor)
+  cross_tabs <- if("quosures" %in% class(predictor_list)){
+    {{predictor_list}}
+  } else {
+    predictor_list %>% 
+      syms() 
+  }
+  
+  dat %>% 
+    select(all_of(predictor_list)) %>% 
+    select(where(is.numeric)) %>% 
+map(~ roc(response = pull(dat, {{response}}),  predictor = .x, ci = TRUE))  %>% 
+  enframe(name = "Variable", value = "ROC") %>% 
+  # AUCs 
+  mutate(auc = map(.x = ROC, .f = ~ .x$ci),
+         AUC = map_dbl(.x = ROC, .f = ~ .x$auc),
+         lcl = map_dbl(.x = ROC, .f = ~.x$ci[1]),
+         ucl = map_dbl(.x = ROC, .f = ~.x$ci[3]),
+         across(c(AUC, lcl, ucl), formatC, format = "f", digits = 3),
+         AUC_ci = paste0("(", lcl, ", ", ucl, ")")) %>% 
+    select(Variable, AUC, AUC_ci)
+
+}
+# DiagnosticROC(oct_visits, injected, noa_fluid)
 
 # Function to convert a set of dummy variables to a factor
 # Args: data frame to reshape

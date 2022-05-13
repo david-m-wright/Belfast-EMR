@@ -309,11 +309,6 @@ va_long <- injection_summary_eye %>%
 # toc()
 
 
-# va_long %>% 
-# filter(PatientID == "0003EFCD-E31E-EB56-3061-8A5B47B2B921") %>% 
-#   ggplot(aes(x = months_since_index, y = 1-va_logmar)) +
-#   geom_point() +
-#   geom_smooth() 
 
 
 ## Find closest VA measurement to each of the specified snapshot times, within set tolerances
@@ -405,11 +400,6 @@ eye_raw <- patients %>%
     # No injections after index date (so no treatment intervals can be calculated)
     exclude_no_intervals = total_intervals == 0) 
 
-eye_raw %>% 
-  count(total_injections, exclude_lt3_injections)
-
-eye_raw %>% 
-  count(across(matches("exclude")))
 
 # Apply the exclusion criteria
 eye <- eye_raw %>% 
@@ -473,6 +463,9 @@ treatment_intervals <- injections %>%
 treatment_intervals %>% 
   select(sequence_id, EncounterDate, treatment_interval_weeks, treatment_months)
 
+# Define patient as stable in a given year if 
+# No treatment intervals <= 40 days?
+# What about first year with loading doses - would classify all patients as unstable
 treatment_intervals %>% 
   group_by(sequence_id) %>% 
   mutate(short_interval = treatment_interval_days <= 40,
@@ -483,11 +476,10 @@ treatment_intervals %>%
   select(sequence_id, treatment_interval_days, short_interval)
   #select(sequence_id, EncounterDate, treatment_interval_days, treatment_months, next_interval_short, longest_interval, ratio_present_to_last)
 
-# Define patient as stable in a given year if 
-# No treatment intervals <= 40 days?
-# What about first year with loading doses - would classify all patients as unstable
 
 
+# NOA data dictionary
+noa_dictionary <- fread(find_rstudio_root_file("data-dictionary/NOA_dictionary.csv")) 
 
 # Progress logs from the NOA
 latest_noa_log <- list.files(file.path(file_path, "NOA-output"), pattern = "[0-9]{2}-[0-9]{2}-[0-9]{4}") %>% 
@@ -515,7 +507,16 @@ noa_raw <- fread(file.path(file_path, "NOA-output", "Results.csv"),
   mutate(across(EyeCode, ~if_else(.== "OD", "R", "L")),
          across(OCTDate, ymd),
          across(OCTSequence, ~as.numeric(if_else(is.na(OCTSequence), "0", OCTSequence))),
-         across(matches("Bscan_|Section_"), ~na_if(., -1000)))
+         across(matches("Bscan_|Section_"), ~na_if(., -1000)),
+         across(c(IRF, 
+                  SRF, 
+                  Fluid, 
+                  `Bscan_1st_highest_fluid[nl]`,
+                  `Bscan_2nd_highest_fluid[nl]`,
+                  `Bscan_3rd_highest_fluid[nl]`,
+                  ERM,
+                  RPE_irregularities,
+                  PED), as.factor))
 
 
 # Where there were multiple scans, select the best quality scan for each eye for each visit date
@@ -563,10 +564,9 @@ oct_visits <- eye %>%
   # Indicate whether the NOA processing was unsuccessful for a given visit
   # If there were multiple scans taken, all must have been unsuccessful for the visit to be flagged here
   left_join(noa_unsuccessful %>% 
-              mutate(GenFileName = str_remove(FileName, "_[0-9]{3}$")) %>% 
-              group_by(GenFileName) %>% 
-              slice_head(n = 1) %>% 
-              ungroup() %>% 
+            group_by(PatientID, EyeCode, OCTDate) %>% 
+            slice_max(OCTSequence, n=1, with_ties = FALSE) %>% 
+            ungroup() %>% 
               select(PatientID, EyeCode, OCTDate, Details), 
               by = c("PatientID", "EyeCode", "EncounterDate" = "OCTDate")) %>% 
   mutate(Details = if_else(!is.na(`Analysis eligibility`), as.character(NA), Details)) %>%
@@ -577,23 +577,6 @@ oct_visits <- eye %>%
                                 `Analysis eligibility` == 0 ~ "Ineligible",
                                 !is.na(Details) ~ "Unsuccessful"))
   
-
-
-
-noa_unsuccessful %>% 
-  group_by(PatientID, EyeCode, OCTDate) %>% 
-  slice_max(OCTSequence, n=1, with_ties = FALSE)
-
-oct_visits %>% 
-  count(injected, `Analysis eligibility`)
-
-oct_visits %>% 
-  count(injected, Details)
-
-oct_visits %>% 
-  count(`Analysis eligibility`, Details, OCT_status)
-
-
 # Just eyes with at least one valid OCT visit
 eye_oct <- eye %>% 
   inner_join(oct_visits %>% 
@@ -602,10 +585,9 @@ eye_oct <- eye %>%
 
 
 
+### Sequencing of AVI files ###
 
-
-  
-# Generate list of AVI files to prioritise here.
+# Generate list of AVI files to prioritise
 oct_to_process <- oct_visits %>% 
    filter(is.na(`Analysis eligibility`)) %>% 
   select(PatientID, EyeCode, EncounterDate) %>% 
@@ -640,79 +622,6 @@ oct_to_process <- oct_visits %>%
 
 ### End of NOA machine section ###
 
-
-
-# All injections are considered operations. 
-
-# Suggest Doctor or Nurse led outpatient clinic
-
-encounters %>% count(LocationTypeDesc)
-encounters %>% 
-count(PatientID, ClinicalCategoryDesc)
-
-# Multiple encounters per day per patient as they move through the clinic
-encounters %>% 
-  count(PatientID, EncounterDate) %>% 
-  inner_join(encounters)
-
-# Anti-VEGFs may be used to treat neovascular glaucoma
-
-# What about general appointments?
-oct_thickness %>% filter(PatientID == "00F1B674-FBBE-6520-F6E3-578CFDDCC299")
-noa_raw %>% filter(PatientID == "00F1B674-FBBE-6520-F6E3-578CFDDCC299")
-
-# Match all the file names that are NOT in the list to keep
-
-# Move them into another directory for later processing
-
-
-
-
-
-
-
-noa %>% 
-  filter(!is.na(OCTSequence)) %>% 
-  count(OCTSequence, FramesNum)
-
-
-noa %>% 
-  filter(`Analysis eligibility` == 1)
-
-# -1000 for fluid indicates dry retina
-
-# Can include final injections (at end of unbounded interval)
-
-
-noa %>% count(across(matches("_vol"), ~.== -1000)) %>% print(n=Inf)
-
-noa %>% 
-  ggplot(aes(x = `Tempo6_vol[nl]`, y = `Tempo3_vol[nl]`)) +
-  geom_point() 
-
-noa %>% 
-  count(`Tempo6_vol[nl]` == -1000)
-
-noa %>% 
-  count(`Tempo6_vol[nl]` > `Tempo3_vol[nl]`)
-
-noa %>% 
-  mutate(across(everything(), ))
-
-noa %>% 
-  filter(`Analysis eligibility` == 1) %>% 
-  group_by(PatientID, EyeCode)
-  
-
-noa %>% 
-  count(`Analysis eligibility`)
-noa %>% count(SRF, SRFVolumeNl > 0,
-              SRFVolumeNl > 5)
-
-noa %>% 
-  filter(SRF == 1) %>% 
-ggplot(aes(x = SRFVolumeNl)) + geom_histogram(bins = 60) +
-  facet_wrap(~SRF)
 
 ## Basic descriptive statistics of the cohort
 
@@ -765,41 +674,3 @@ both_eye_summary <- eye_raw %>%
   mutate(fellow_eye_conversion = !is.na(injection_delay_months) & injection_delay_months > 0)
   
   
-
-both_eye_summary %>% 
-  select(injection_delay_months, both_eye_visits,single_eye_visits, oct_both_observed_years, fellow_eye_conversion) %>% 
-  mutate(oct_both_observed_years_cat = as.factor(floor(oct_both_observed_years))) %>% 
-   mutate(across(both_eye_visits, as.factor)) %>% 
-  GenerateDescriptives(type = list(injection_delay_months = "Median (IQR)",
-    single_eye_visits = "Median (IQR)", 
-                                   both_eye_visits = "Median (IQR)", 
-                                   oct_both_observed_years = "Median (IQR)")) %>% print(n=Inf)
-
-
-both_eye_summary %>% 
-  summarise(across(c(single_eye_visits, both_eye_visits), sum)) %>% 
-  mutate(total_scans = single_eye_visits + both_eye_visits*2)
-
-
-both_eye_summary %>% mutate(across(oct_both_observed_years, floor)) %>% tabyl(oct_both_observed_years) %>% 
-  mutate(cumsum = cumsum(percent))
-
-
-both_eye_summary %>% tabyl(both_eye_visits) %>% 
-  mutate(cumsum = cumsum(percent))
-
-summary(encounters$EncounterDate)
-
-# Number of dual eye sequences
-both_eye_summary %>% 
-  ggplot(aes(x = oct_both_observed_years)) +
-  geom_histogram()
-
-both_eye_summary %>% 
-ggplot(aes(x = injection_delay_months)) +
-  geom_histogram()
-
-
-
-
-
