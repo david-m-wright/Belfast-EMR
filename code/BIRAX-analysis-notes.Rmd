@@ -396,7 +396,8 @@ bind_rows(
       count(PatientID, EyeCode, treatment_year, name = "OCT exams") %>% 
       inner_join(snapshots %>% 
                    filter(follow_up_year != "0"), by = c("treatment_year" = "follow_up_year")) %>% 
-      mutate(`Received` = if_else(`OCT exams` < 5, "<5 per year", ">=5 per year"),
+      mutate(Received = cut(`OCT exams`, breaks = c(0,4,7, max(.$`OCT exams`)),
+                        labels = c("<5 per year", "5-7 per year", ">=8 per year")),
              Eyes = " ") %>% 
       select(treatment_year,  `OCT exams`, Received, Eyes) %>% 
       GenerateDescriptives(col_var = treatment_year),
@@ -418,7 +419,8 @@ bind_rows(
   count(PatientID, EyeCode, treatment_year, name = "Injections") %>% 
   inner_join(snapshots %>% 
                    filter(follow_up_year != "0"), by = c("treatment_year" = "follow_up_year")) %>% 
-  mutate(`Received` = if_else(Injections < 5, "<5 per year", ">=5 per year"),
+  mutate(Received = cut(Injections, breaks = c(0,4,7, max(.$Injections)),
+                        labels = c("<5 per year", "5-7 per year", ">=8 per year")),
     Eyes = " ") %>% 
   select(treatment_year,  Injections, Received, Eyes) %>% 
   GenerateDescriptives(col_var = treatment_year),
@@ -458,4 +460,98 @@ bind_rows(
     kbl(caption = "Distribution of treatment intervals by year of anti-VEGF treatment. Intervals were assigned to years based on where the start of the treatment interval fell.") %>% 
     kable_paper()
 ```
+
+## Outcomes by visual acuity at baseline
+
+```{r va-descriptives-by-baseline-va}
+bind_rows(
+  va_history %>%
+    filter(snapshot) %>% 
+    transmute(follow_up_year, va_logmar, va_category_snellen) %>%
+    group_by(va_category_snellen) %>%
+    nest() %>%
+    mutate(df = map(
+      .x = data,
+      .f = ~ GenerateDescriptives(., col_var = follow_up_year)
+    )) %>%
+    select(-data) %>%
+    unnest(cols = c(df)) %>%
+    arrange(va_category_snellen),
+  
+  va_history %>%
+    filter(snapshot) %>% 
+    transmute(follow_up_year, va_change_lines, va_category_snellen, Eyes = "n") %>%
+    group_by(va_category_snellen) %>%
+    nest() %>%
+    mutate(df = map(
+      .x = data,
+      .f = ~ GenerateDescriptives(., col_var = follow_up_year)
+    )) %>%
+    select(-data) %>%
+    unnest(cols = c(df)) %>%
+    arrange(va_category_snellen)
+) %>%
+  
+  left_join(var_desc, by = "Variable") %>%
+  mutate(Description = coalesce(Description, Variable)) %>%
+  select(Description, everything(),-Variable) %>%
+  rename(`Baseline VA category` = va_category_snellen) %>%
+  kbl(caption = "Distribution of visual acuity outcomes at the end of each year of anti-VEGF treatment by baseline visual acuity. '0' indicates baseline measurements.") %>%
+  kable_paper()
+```
+
+```{r injections-by-year-by-baseline-va}
+bind_rows(
+# Find baseline VA
+  va_history %>% 
+  filter(snapshot, follow_up_year == 0) %>%
+  select(PatientID, EyeCode, va_category_snellen) %>% 
+# Join injections in the years of interest
+    inner_join(injections, by = c("PatientID", "EyeCode")) %>% 
+  inner_join(snapshots %>% 
+                   filter(follow_up_year != "0"), by = c("treatment_year" = "follow_up_year")) %>% 
+  # Count the injections per eye per year
+  count(PatientID, EyeCode, va_category_snellen, treatment_year, name = "Injections") %>% 
+  select(-PatientID, -EyeCode) %>% 
+  group_by(va_category_snellen) %>%
+    nest() %>%
+    mutate(df = map(
+      .x = data,
+      .f = ~ GenerateDescriptives(., col_var = treatment_year)
+    )) %>%
+    select(-data) %>%
+    unnest(cols = c(df)) %>% 
+  arrange(va_category_snellen),
+
+  # Find baseline VA
+va_history %>% 
+  filter(snapshot, follow_up_year == 0) %>%
+  select(PatientID, EyeCode, va_category_snellen) %>% 
+# Join injections in the years of interest
+  inner_join(injections, by = c("PatientID", "EyeCode")) %>% 
+  inner_join(snapshots %>% 
+                   filter(follow_up_year != "0"), by = c("treatment_year" = "follow_up_year")) %>% 
+  # Count the injections per eye per year
+  count(PatientID, EyeCode, va_category_snellen, treatment_year, name = "Injections") %>% 
+mutate(Received = cut(Injections, breaks = c(0,4,7, max(.$Injections)),
+                        labels = c("<5 per year", "5-7 per year", ">=8 per year")),
+       Eyes = " ") %>%   
+  
+  select(-PatientID, -EyeCode, -Injections) %>% 
+  group_by(va_category_snellen) %>%
+    nest() %>%
+    mutate(df = map(
+      .x = data,
+      .f = ~ GenerateDescriptives(., col_var = treatment_year)
+    )) %>%
+    select(-data) %>%
+    unnest(cols = c(df)) %>% 
+  arrange(va_category_snellen)
+
+) %>% 
+  rename(`Baseline VA category` = va_category_snellen) %>%
+  kbl(caption = "Distribution of injections received by year of anti-VEGF treatment and baseline visual acuity.") %>% 
+  kable_paper()
+```
+
 

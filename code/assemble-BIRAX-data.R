@@ -673,4 +673,4 @@ both_eye_summary <- eye_raw %>%
   # Indicate conversion event in fellow eye
   mutate(fellow_eye_conversion = !is.na(injection_delay_months) & injection_delay_months > 0)
   
-  
+
