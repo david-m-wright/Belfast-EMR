@@ -1,5 +1,11 @@
 # Assemble NOA dataset
 
+library(tidyverse)
+library(lubridate)
+library(data.table)
+library(rprojroot)
+
+file_path <- find_rstudio_root_file("data/BIRAX data") 
 
 # NOA data dictionary
 noa_dictionary <- fread(find_rstudio_root_file("data-dictionary/NOA_dictionary.csv")) 
@@ -60,16 +66,16 @@ noa <- noa_raw %>%
 
 
 ### Sequencing of AVI files ###
-
-# Generate list of AVI files to prioritise
-oct_to_process <- oct_visits %>% 
-  filter(is.na(`Analysis eligibility`)) %>% 
-  select(PatientID, EyeCode, EncounterDate) %>% 
-  # Generate the root filenames to search for
-  mutate(GenFileName = paste(PatientID, 
-                             if_else(EyeCode == "R", "OD", "OS"), 
-                             format(EncounterDate, format = "%Y%m%d"),       
-                             sep = "_"))
+# 
+# # Generate list of AVI files to prioritise
+# oct_to_process <- oct_visits %>% 
+#   filter(is.na(`Analysis eligibility`)) %>% 
+#   select(PatientID, EyeCode, EncounterDate) %>% 
+#   # Generate the root filenames to search for
+#   mutate(GenFileName = paste(PatientID, 
+#                              if_else(EyeCode == "R", "OD", "OS"), 
+#                              format(EncounterDate, format = "%Y%m%d"),       
+#                              sep = "_"))
 
 
 # write_csv(oct_to_process %>% 

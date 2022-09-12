@@ -17,7 +17,6 @@ source(find_rstudio_root_file("code/EMR-helper-functions.R"))
 # Derived variable labels
 var_desc <- read_csv(find_rstudio_root_file("data-dictionary/Belfast-EMR-derived-variables.csv"))
 
-
 file_path <- find_rstudio_root_file("data/BIRAX data") 
 
 # Characteristics of input files
@@ -175,11 +174,13 @@ visual_acuity <- fread(file.path(file_path, "BELVisualAcuity.txt")) %>%
                                         as.character(va(RecordedNotationBestMeasure, from = "snellen", to = "etdrs")),
                                       str_detect(RecordedNotation, "SNELLENFRACTION") ~ 
                                         as.character(va(RecordedNotationBestMeasure, from = "snellendec", to = "etdrs"))),
-         # Note that the 2DP logmar is rounded to 1DP before converion to ETDRS
-         logmar_to_etdrs = as.character(va(coalesce(Logmar2DBestMeasure, Logmar1DBestMeasure), from = "logmar", to = "etdrs")),
+         # Note that the 2DP logmar is rounded to 1DP before conversion to ETDRS
+         logmar_to_etdrs = as.character(coalesce(va(Logmar2DBestMeasure, from = "logmar", to = "etdrs"),
+                                                 va(Logmar1DBestMeasure, from = "logmar", to = "etdrs"))),
          va_etdrs = as.numeric(coalesce(cleaned_etdrs, snellen_to_etdrs, logmar_to_etdrs))) %>% 
   
-  mutate(cleaned_logmar = as.character(va(coalesce(Logmar2DBestMeasure, Logmar1DBestMeasure), from = "logmar", to = "logmar")),
+  mutate(cleaned_logmar = as.character(coalesce(va(Logmar2DBestMeasure, from = "logmar", to = "logmar"), 
+                                                va(Logmar1DBestMeasure, from = "logmar", to = "logmar"))),
          etdrs_to_logmar = if_else(str_detect(RecordedNotation, "LETTERSCORE"), 
                                    as.character(va(RecordedNotationBestMeasure, from = "etdrs", to = "logmar")), as.character(NA)),
          snellen_to_logmar = case_when(str_detect(RecordedNotation, "SNELLEN(FEET|METRES)") ~ 
@@ -197,32 +198,36 @@ visual_acuity <- fread(file.path(file_path, "BELVisualAcuity.txt")) %>%
          va_category_etdrs = fct_explicit_na(cut(va_etdrs,
                                                  breaks = c(0, 32, 73, 100),
                                                  labels = c("<33 letters", "33-73 letters", ">73 letters"), include.lowest = T),
-                                             na_level = "Missing")) 
+                                             na_level = "Missing")) %>% 
+  # Take the first VA measurement on a given day (most likely to match an injection encounter)
+  group_by(PatientID, EyeCode, EncounterDate) %>% 
+  slice_min(EncounterDateTime, with_ties = FALSE) %>% 
+  ungroup()
+
 
 # Injections
 injections_raw <- fread(file.path(file_path, "BELInjections.txt")) %>% 
   # Exclude non anti-VEGF injections
   mutate(exclude_not_antiVEGF = AntiVEGFInjection != 1) %>% 
   # Exclude a small number of duplicate encounters on the same date so only one injection per eye per date
-  group_by(PatientID, EyeCode, EncounterDate, InjectedDrugDesc, exclude_not_antiVEGF) %>% 
-  summarise(row_number = row_number(), 
-            EncounterID = EncounterID[row_number==1], .groups = "drop") %>% 
-  mutate(exclude_duplicate_encounter = row_number != 1) %>% 
-  select(-row_number) 
+  group_by(PatientID, EyeCode, EncounterDate, exclude_not_antiVEGF) %>% 
+  slice_head(n = 1) %>% 
+  ungroup()
 
 injections_clean <- injections_raw %>% 
-  filter(!exclude_not_antiVEGF, !exclude_duplicate_encounter) %>% 
-  select(-exclude_not_antiVEGF, -exclude_duplicate_encounter) %>%   
+  filter(!exclude_not_antiVEGF) %>% 
+  select(PatientID, EyeCode, EncounterDate, InjectedDrugDesc, EncounterID) %>% 
   # Add visual acuity at the selected encounter
   left_join(visual_acuity %>%
-              select(PatientID, EyeCode, EncounterID, va_etdrs, va_logmar),
-            by = c("PatientID", "EyeCode", "EncounterID")) 
+              select(PatientID, EyeCode, EncounterDate, va_etdrs, va_logmar),
+            by = c("PatientID", "EyeCode", "EncounterDate")) 
 
 # OCT thickness maps
-oct_thickness <- fread(file.path(file_path, "OCT_ThicknessMetrics.txt")) 
-
-
-
-
+oct_thickness <- fread(file.path(file_path, "OCT_ThicknessMetrics.txt")) %>% 
+  # Select a single scan for each eye and date
+  group_by(PatientID, EyeCode, ExamDate) %>% 
+  # ScanSeq is the latest exam for that eye on that date
+  slice_min(order_by = ScanSeq, with_ties = FALSE) %>% 
+  ungroup()
 
 

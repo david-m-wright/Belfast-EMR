@@ -1,0 +1,309 @@
+---
+title: "BIRAX study - Analysis Notes"
+author: "David M Wright - d.wright@qub.ac.uk"
+date: "Document compiled: `r Sys.Date()`"
+output: 
+  bookdown::html_document2:
+     toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(knitr)
+library(kableExtra)
+library(rprojroot)
+```
+
+`r R.version.string`   
+
+# Introduction
+
+This analysis is of Electronic Medical Records (EMR) from the Belfast Health and Social Care Trust Macular Service. The aim of the study is to investigate the potential for machine learning to identify factors and biomarkers associated with long-term AMD treatment response. 
+
+This document describes processing of EMR data provided by Medisoft.  
+
+```{r run-analysis, include=FALSE}
+source(find_rstudio_root_file("Code/BIRAX-assemble-Medisoft-data.R"))
+```
+
+
+# Pre-processing 
+
+The data structure is defined in the files `Medisoft Medical Retina Study - Data Dictionary v1.0.xls` and `Medisoft Medical Retina Study - OCT Thickness Metrics Data Dictionary-14-May-2020` and a total of `r nrow(emr_table_list)` separate pipe delimited files were provided (Table \@ref(tab:table-descriptions)). Bullet points describe operations performed on the data. 
+
+```{r table-descriptions}
+emr_table_list %>% 
+  kbl(caption = "Description of input data files.") %>% 
+  kable_paper()
+```
+
+
+## BELClinicalFindings table
+
+Detailed clinical findings (Table \@ref(tab:clinical-findings)) are not currently used in the analysis.
+
+```{r clinical-findings}
+clinical %>% 
+  count(ClinicalTermDescription) %>% 
+  slice_sample(n = 5) %>% 
+  arrange(desc(n)) %>% 
+  kbl(caption = "Examples of clinical findings records. Multiple records per patient.") %>% 
+  kable_paper()
+```
+
+## BELCoPathology table
+
+The date of diagnosis of various ocular co-pathologies was recorded in this table. 
+
+```{r co-pathology}
+copath %>% 
+  filter(CoPathologyDesc != "None") %>% 
+  count(CoPathologyCode, CoPathologyDesc) %>% 
+  arrange(desc(n)) %>%
+  kbl(caption = "Distribution of ocular co-pathologies (eye level records).") %>% 
+  kable_paper()
+```
+```{r co-pathology-count}
+copath %>% 
+  filter(CoPathologyDesc != "None") %>% 
+  distinct(PatientID, EyeCode, CoPathologyDesc) %>% 
+  count(PatientID, EyeCode, name = "Number of co-pathologies") %>% 
+  count(`Number of co-pathologies`) %>% 
+  kbl(caption = "Distribution of co-pathologies per eye.") %>% 
+  kable_paper()
+```
+
+## BELDiabeticDiagnosis table
+
+This table has information on diabetes diagnoses for patients in the dataset.
+
+* Identified the diabetes type and age diagnosed for each patient. For those with more than one type recorded, the most commonly recorded type was taken. It was assumed that those with an unknown diabetic status (i.e. did not appear in this table) did not have diabetes.
+* Derived an indicator variable for any type of diabetes `Diabetes` (Table \@ref(tab:diabetes)).
+
+
+```{r diabetes}
+diabetes %>% 
+  count(DiabetesTypeDesc, DiabetesType, Diabetes) %>% 
+  arrange(desc(n)) %>%
+  kbl(caption = "Distribution of diabetes diagnoses. Multiple records per patient.") %>% 
+  kable_paper()
+```
+
+
+## BELDiagnosis table
+
+A table of all diagnoses recorded in the system at any time for any patient within the cohort (Table \@ref(tab:diagnoses)).
+
+```{r diagnoses}
+diagnoses %>% 
+  count(DiagnosisCategoryDesc, DiagnosisDescription) %>% 
+  # slice_sample(n = 5) %>% 
+  arrange(DiagnosisCategoryDesc, desc(n)) %>% 
+     # write_csv(file = "GRIP-diagnosis-lookup.csv")
+  kbl(caption = "Examples of diagnoses. Multiple records per patient.") %>% 
+  kable_paper()
+
+```
+
+## BELDRAssessment table
+
+This table lists DR Assessment outcomes for any patient within the cohort (Table \@ref(tab:DR-assessment)).
+
+```{r DR-assessment}
+dr_assessment %>% 
+  count(DRAssessmentTypeDesc, DRAssessmentDesc) %>% 
+  arrange(desc(n)) %>% 
+  kbl(caption = "Distribution of DR assessment outcomes. Multiple records per patient.") %>% 
+  kable_paper()
+```
+
+## BELDRGrading
+
+This table lists DR Grading outcomes for any patient within the cohort (Table \@ref(tab:DR-grading)).
+
+```{r DR-grading}
+dr_grading %>% 
+  count(DRGradeDesc) %>% 
+  arrange(desc(n)) %>% 
+  kbl(caption = "Distribution of DR grades. Multiple records per patient.") %>% 
+  kable_paper()
+```
+
+
+## BELEncounters table
+
+This table lists the types of patient encounters (Table \@ref(tab:encounters)). A patient may have multiple encounters on a single visit to the clinic, one with each healthcare professional (e.g. nurse, doctor).    
+
+* Removed `r nrow(filter(encounters_raw, ClinicalCategoryDesc != "Medical retina"))` encounters from clinics other than medical retina (the Medisoft extract included information drawn from glaucoma, cataract and other clinics).   
+* Removed `r nrow(filter(encounters_raw, ClinicalCategoryDesc == "Medical retina", !EncounterTypeCode %in% c("SCLV", "NCLV", "OPER")))` encounters of types other than the three major types for medical retina (nurse, doctor, operation).   
+
+
+```{r encounters}
+encounters %>% 
+  count(EncounterTypeDesc, ClinicalCategoryDesc) %>% 
+  arrange(desc(n)) %>%
+  kbl(caption = "Distribution of clinical encounters. Multiple records per patient.") %>% 
+  kable_paper()
+```
+
+## BELInjections table
+
+A table of ocular injections at any time for any patient within the cohort.
+
+* Removed `r nrow(filter(injections_raw, exclude_not_antiVEGF))` injections that were not for anti-VEGF agents.
+* Removed `r nrow(filter(injections_raw, !exclude_not_antiVEGF, exclude_duplicate_encounter))` duplicate injection entries.   
+* Added visual acuity (VA) measurements to the corresponding injection record.
+
+A total of `r nrow(injections_clean)` injection records remained (Table \@ref(tab:injections)).
+
+```{r injections}
+injections_clean %>% 
+  count(InjectedDrugDesc) %>% 
+  arrange(desc(n)) %>% 
+  kbl(caption = "Distribution of injections by drug type.") %>% 
+  kable_paper()
+```
+
+
+
+## BELInvestigations table
+
+This table lists requested investigations at any time for any patient within the cohort (Table \@ref(tab:investigations)). 
+
+```{r investigations}
+investigations %>% 
+  mutate(InvestigationTypeDesc = fct_lump_min(InvestigationTypeDesc, min = 20, other_level = "Other procedure")) %>% 
+  mutate(InvestigationTypeDesc =  fct_relevel(fct_infreq(InvestigationTypeDesc), "Other procedure", after = Inf)) %>% 
+  count(InvestigationTypeDesc) %>% 
+  kbl(caption = "Distribution of clinical investigations. Multiple records per patient.") %>% 
+  kable_paper()
+```
+
+## BELIOP table
+
+This table gives IOP measurements for the eyes in the dataset (Table \@ref(tab:iop)). The distribution of measurements recorded was right skewed (Figure \@ref(fig:iop-distribution)).
+
+
+```{r iop}
+iop %>% 
+  count(IOPTypeDesc) %>% 
+  arrange(desc(n)) %>%
+  kbl(caption = "Distribution of types of IOP measurement. Multiple records per eye.") %>% 
+  kable_paper()
+```
+
+```{r iop-distribution, fig.cap="Distribution of intra-ocular pressure. Multiple records per eye."}
+ggplot(iop, aes(x = IOP)) +
+  geom_histogram(bins = 50) +
+  theme_light() +
+  labs(x = "IOP (mmHg)", y = "Count") 
+```
+
+## BELMedicalHistory table
+
+This table lists recorded medical history at any time for any patient within the cohort (Table \@ref(tab:med-history)).
+
+```{r med-history}
+med_history %>% 
+  count(MedicalHistoryTypeDesc) %>% 
+  slice_sample(n = 5) %>% 
+  arrange(desc(n)) %>% 
+  kbl(caption = "Examples of medical history records. Multiple records per patient.") %>% 
+  kable_paper()
+```
+## BELMedication
+
+This table lists medications recorded or prescribed at any time for any patient within the cohort (Table \@ref(tab:medication)). It is not currently used but will eventually be used to determine history of hypertension and other systemic conditions.
+
+```{r medication}
+medication %>% 
+  select(EyeCode, DrugDescription, DrugDose, DrugFreqDesc, DrugDuration, MedicationStartDate, MedicationStopDate) %>% 
+  slice_sample(n = 5) %>% 
+  kbl(caption = "Examples of medication records. Multiple records per patient.") %>% 
+  kable_paper()
+```
+
+## BELOperativeComplications table
+
+This table records post-operative complications (Table \@ref(tab:post-op)). It is not currently used for this analysis.
+
+```{r post-op}
+post_op %>% 
+  count(ComplicationDesc) %>% 
+  arrange(desc(n)) %>% 
+  kbl(caption = "Distribution of post-operative complications. Multiple records per eye.") %>% 
+  kable_paper()
+```
+## BELPatientDetails
+
+This table lists patients included within the cohort (Table \@ref(tab:patients)).
+
+```{r patients}
+patients %>% 
+  slice_sample(n=5) %>% 
+  select(-SiteID, -ExtractDate) %>% 
+  kbl(caption = "Sample of patient details.") %>% 
+  kable_paper()
+```
+
+## BELSurgery
+
+This table lists ocular procedures for any patient within the cohort (Table \@ref(tab:surgery)). It is not currently used in this analysis.
+
+```{r surgery}
+surgery %>% 
+  mutate(ProcedureDesc = fct_lump_min(ProcedureDesc, min = 100, other_level = "Other procedure")) %>% 
+  mutate(ProcedureDesc =  fct_relevel(fct_infreq(ProcedureDesc), "Other procedure", after = Inf)) %>% 
+  count(ProcedureDesc) %>% 
+  kbl(caption = "Distribution of surgery types. Multiple records per eye.") %>% 
+  kable_paper()
+```
+## BELSurgeryIndications
+
+This table lists ndications for surgery (primary diagnosis) for any patient within the cohort (Table \@ref(tab:surgery-ind))
+
+```{r surgery-ind}
+surgery_ind %>% 
+  count(IndicationDesc) %>% 
+  arrange(desc(n)) %>% 
+  slice(1:10) %>% 
+  kbl(caption = "Distriubtion of surgery indications (sample of records). Multiple records per eye.") %>% 
+  kable_paper()
+```
+
+## BELVisualAcuity table
+
+This table records visual acuity measurements, which had a right skewed distribution (Figure \@ref(fig:va-dist)).   
+    
+* Conversion of visual acuity measurements to both ETDRS and logMAR formats.   
+* Categorisation of visual acuity based on ETDRS letters (3 categories, calculations on letters).   
+* Categorisation of visual acuity into 4 Snellen categories (calculations in logMAR units).   
+* Retained only a single visual acuity measurement for each eye on each date (took the earliest measurement).   
+
+
+```{r va-dist, fig.cap="Distribution of visual acuity. Multiple records per eye."}
+visual_acuity %>% 
+  filter(!is.na(va_logmar)) %>% 
+ggplot(aes(x = va_logmar)) +
+  geom_histogram(bins = 30) +
+  theme_light() +
+  labs(x = "Visual acuity (logMAR)", y = "Count")
+```
+
+## OCT_ThicknessMetrics
+
+This table gives computed retinal thickness metrics derived from OCT scans. Thicknesses and volumes are given for each of the 9 regions in the ETDRS grid (Table \@ref(tab:oct-thickness)).
+
+* Retained only a single OCT measurement for each eye on each date.   
+
+
+```{r oct-thickness}
+oct_thickness %>% 
+  select(matches("Thickness")) %>% 
+  slice_sample(n=5) %>% 
+  kbl(caption = "Sample of retinal thickness metrics from OCT.") %>% 
+  kable_paper()
+```
+
+
+
