@@ -1,5 +1,5 @@
 ---
-title: "BIRAX study - Analysis Notes"
+title: "BIRAX study - Assemble Medisoft data"
 author: "David M Wright - d.wright@qub.ac.uk"
 date: "Document compiled: `r Sys.Date()`"
 output: 
@@ -150,9 +150,8 @@ encounters %>%
 
 A table of ocular injections at any time for any patient within the cohort.
 
-* Removed `r nrow(filter(injections_raw, exclude_not_antiVEGF))` injections that were not for anti-VEGF agents.
-* Removed `r nrow(filter(injections_raw, !exclude_not_antiVEGF, exclude_duplicate_encounter))` duplicate injection entries.   
-* Added visual acuity (VA) measurements to the corresponding injection record.
+* Removed duplicate injection entries.   
+* Removed `r nrow(filter(injections_raw, exclude_not_antiVEGF))` injections that were not for anti-VEGF agents.   
 
 A total of `r nrow(injections_clean)` injection records remained (Table \@ref(tab:injections)).
 
@@ -278,7 +277,7 @@ This table records visual acuity measurements, which had a right skewed distribu
 * Conversion of visual acuity measurements to both ETDRS and logMAR formats.   
 * Categorisation of visual acuity based on ETDRS letters (3 categories, calculations on letters).   
 * Categorisation of visual acuity into 4 Snellen categories (calculations in logMAR units).   
-* Retained only a single visual acuity measurement for each eye on each date (took the earliest measurement).   
+* Retained only a single visual acuity measurement for each eye on each date (took best measurement [lowest logMAR]).   
 
 
 ```{r va-dist, fig.cap="Distribution of visual acuity. Multiple records per eye."}

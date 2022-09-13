@@ -1,0 +1,66 @@
+---
+title: "BIRAX study - assemble retinal fluid data (NOA)"
+author: "David M Wright - d.wright@qub.ac.uk"
+date: "Document compiled: `r Sys.Date()`"
+output: 
+  bookdown::html_document2:
+     toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(knitr)
+library(kableExtra)
+library(rprojroot)
+library(skimr)
+library(janitor)
+```
+
+`r R.version.string`   
+
+# Introduction
+
+This analysis is of Electronic Medical Records (EMR) from the Belfast Health and Social Care Trust Macular Service. The aim of the study is to investigate the potential for machine learning to identify factors and biomarkers associated with long-term AMD treatment response. 
+
+This document describes processing of retinal fluid measurements produced from Optical Coherence Tomography (OCT) scans using the Notal Ophthalmic Analyser (NOA) software.    
+
+
+```{r run-analysis, include=FALSE}
+source(find_rstudio_root_file("Code/BIRAX-assemble-NOA-data.R"))
+```
+
+
+# Pre-processing 
+
+The NOA was run on a heterogeneous collection of OCT scans of various sizes and resolutions, including those of patients with DMO and other exudative retinopathies, over 300,000 scans in total. OCT scans were captured on the Heidelberg Spectralis platform and were extracted and anonymised by the EMR provider (Medisoft) before transfer to the research team. Extracted volume scans were provided in two formats, sets of 2D B-scan images (bmp), and videos stitched together from the component B-scans (AVI). The NOA was run on AVI files. Current progress of the NOA in terms of scans processed is summarised in Table \@ref(tab:noa-logs). Unsuccessful scans were those that could not be processed by the NOA and were discarded. Reasons for unsuccessful processing are given in Table \@ref(tab:noa-unsuccessful). Successful scans were labelled by eligibility for inclusion in the analysis. Ineligible scans were those where the NOA outputs are likely to be unreliable. 
+
+```{r noa-logs}
+noa_log %>% 
+  arrange(as.numeric(str_extract(batch, "[0-9]{1,2}"))) %>% 
+  relocate(batch, log_time) %>% 
+  kbl(caption = "Progress of the NOA software in processing OCT scans.") %>% 
+  kable_paper()
+```
+
+```{r noa-unsuccessful}
+noa_unsuccessful %>% 
+  mutate(across(Details, str_remove, pattern = "[0-9]{1,3}.[0-9]+")) %>% 
+  tabyl(Details) %>% 
+  arrange(desc(n)) %>% 
+   adorn_totals() %>% 
+   adorn_pct_formatting() %>% 
+      kbl(caption = "Reasons given for unsuccessful NOA analysis.") %>% 
+      kable_paper()
+```
+
+## NOA output
+
+The NOA output data structure is defined in the file `NOA_Dictionary.xls` supplied by Notal Vision. Briefly, the presence or absence of IRF and SRF is indicated, along with volume measurements if fluid is detected, in regions defined according to the ETDRS grid.
+
+Bullet points describe operations performed on the data. 
+
+* Patient and eye identifiers extracted from `FileName` column.   
+* Where multiple scans were taken for the same eye on the same day, select a single scan by applying the following criteria, breaking ties with the next criterion on the list:   
+   + Scan with the fewest missing values, indicating a more successful NOA analysis.   
+   + Scan with the largest number of B-scans (`FrameNum`).   
+   + Last scan taken on that day.    

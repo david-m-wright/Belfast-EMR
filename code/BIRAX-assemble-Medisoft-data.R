@@ -199,9 +199,9 @@ visual_acuity <- fread(file.path(file_path, "BELVisualAcuity.txt")) %>%
                                                  breaks = c(0, 32, 73, 100),
                                                  labels = c("<33 letters", "33-73 letters", ">73 letters"), include.lowest = T),
                                              na_level = "Missing")) %>% 
-  # Take the first VA measurement on a given day (most likely to match an injection encounter)
+  # Take best VA measurement on a given day
   group_by(PatientID, EyeCode, EncounterDate) %>% 
-  slice_min(EncounterDateTime, with_ties = FALSE) %>% 
+  slice_min(va_logmar, n=1, with_ties = FALSE) %>% 
   ungroup()
 
 
@@ -211,16 +211,16 @@ injections_raw <- fread(file.path(file_path, "BELInjections.txt")) %>%
   mutate(exclude_not_antiVEGF = AntiVEGFInjection != 1) %>% 
   # Exclude a small number of duplicate encounters on the same date so only one injection per eye per date
   group_by(PatientID, EyeCode, EncounterDate, exclude_not_antiVEGF) %>% 
-  slice_head(n = 1) %>% 
+  slice_head(n=1) %>% 
   ungroup()
-
+  
 injections_clean <- injections_raw %>% 
   filter(!exclude_not_antiVEGF) %>% 
-  select(PatientID, EyeCode, EncounterDate, InjectedDrugDesc, EncounterID) %>% 
-  # Add visual acuity at the selected encounter
-  left_join(visual_acuity %>%
-              select(PatientID, EyeCode, EncounterDate, va_etdrs, va_logmar),
-            by = c("PatientID", "EyeCode", "EncounterDate")) 
+  select(PatientID, EyeCode, EncounterDate, InjectedDrugDesc, EncounterID) #%>% 
+  # # Add visual acuity at the selected encounter
+  # left_join(visual_acuity %>%
+  #             select(PatientID, EyeCode, EncounterDate, va_etdrs, va_logmar),
+  #           by = c("PatientID", "EyeCode", "EncounterDate")) 
 
 # OCT thickness maps
 oct_thickness <- fread(file.path(file_path, "OCT_ThicknessMetrics.txt")) %>% 
