@@ -138,6 +138,7 @@ DiscreteFrequency <- function(data, row_var, col_var, sig_digits = 3){
 #  
 
 
+
 # Function to generate a table of descriptive statistics,
 # displaying summaries of continuous variables (e.g. mean, SD) or distribution of discrete variables (e.g. %) as appropriate
 # Args: dat = data.frame containing data to tabulate
@@ -153,6 +154,9 @@ GenerateDescriptives <- function(data, col_var = NULL, type = NULL, sig_digits =
   # Columns to tabulate
   tab_data <- data %>% 
     select(-{{col_var}})
+  
+  # Note if the column variable is set to NULL
+  enquo_var <- enquo(col_var)
   
   # Select type of numerical summary for continuous variables 
   ctype <- setNames(rep("Mean (SD)", length.out = ncol(tab_data)),
@@ -177,7 +181,22 @@ GenerateDescriptives <- function(data, col_var = NULL, type = NULL, sig_digits =
                              rename_with(~str_replace(., "_Value", ""), ends_with("_Value")) %>% 
                              mutate(Level = .y)
                          } else { 
-                           DiscreteFrequency(data, row_var = .data[[.x]], col_var = {{col_var}}, sig_digits = sig_digits)
+                           
+                           # For one way table
+                           if(rlang::quo_is_null(enquo_var)){
+                             out_tab <- count(data, .data[[.x]])
+                           } else {
+                             count(data, .data[[.x]], {{col_var}}) %>% 
+                               pivot_wider(names_from = {{col_var}},  values_from = n, values_fill = 0, names_sort = T) 
+                           }
+                           # For two way table
+                           out_tab %>% 
+                             mutate(across(-1, ~paste0(., " (", signif(./sum(.)*100, digits = sig_digits), "%)"))) %>%
+                             rename_with(~"Value", .cols = (matches("^n$"))) %>%
+                             rename(Level = .data[[.x]]) %>%
+                             mutate(across(Level, as.character))
+                           
+                           # DiscreteFrequency(data, row_var = .data[[.x]], col_var = {{col_var}}, sig_digits = sig_digits)
                          }, .id = "Variable")
   
   base_table %>% 
