@@ -6,29 +6,7 @@ library(pROC)
 library(caret)
 
 
-source(find_rstudio_root_file("code/assemble-BIRAX-data.R"))
-
-# NOA variables for analysis
-# Assign parameter groups to character vectors for later use
-noa_general <-  noa_dictionary %>% 
-  filter(Category == "General", 
-         !`Raw Parameter` %in% c("FileName", "Analysis eligibility")) %>% 
-  pull(`Raw Parameter`)
-
-noa_fluid <- noa_dictionary %>% 
-  filter(Category == "Fluid Parameters",
-         str_detect(`Raw Parameter`, "highest", negate = TRUE)) %>% 
-  pull(`Raw Parameter`)
-
-noa_retinal <- noa_dictionary %>% 
-  filter(Category == "Retinal parameters"
-         , str_detect(`Raw Parameter`, "highest|evidence", negate = TRUE)
-  ) %>% 
-  pull(`Raw Parameter`)
-
-noa_grid <- noa_dictionary %>% 
-  filter(Category == "ETDRS Grid Parameters") %>% 
-  pull(`Raw Parameter`)
+source(find_rstudio_root_file("code/BIRAX-assemble-NOA-data.R"))
 
 
 # Diagnostic test accuracy for each NOA variable #

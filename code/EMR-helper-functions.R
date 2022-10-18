@@ -22,6 +22,21 @@ IntervalToInequality <- function(x, unit = "x"){
 # IntervalToInequality(baseline$Myopia)
 
 
+
+# Function to format intervals generated using the cut() function
+# Args:
+# cut_intervals: factor generated using cut()
+# lab: character string to put between the two boundaries
+# FormatIntervals <- function(cut_intervals, lab){
+#   fct_relabel(cut_intervals, ~str_replace(., "([0-9]+)\\]", "<=\\1")) %>% 
+#     fct_relabel(~str_replace(., "([0-9]+)\\)", "<\\1")) %>% 
+#     fct_relabel(~str_replace(., "\\[([0-9]+)", "\\1<=")) %>% 
+#     fct_relabel(~str_replace(., "\\(([0-9]+)", "\\1<")) %>% 
+#     fct_relabel(~str_replace(., ",", lab))
+# }
+
+
+
 # Function to select most frequently occuring non-missing value from a set of values
 # Or first (using sort()) in case of ties
 # Args:
@@ -174,6 +189,7 @@ GenerateDescriptives <- function(data, col_var = NULL, type = NULL, sig_digits =
                                                   `Median (IQR)` = SummariseMedianIQR(.data[[.x]], sig_digits = sig_digits, output_n = output_n),
                                                   `Median (Range)` = SummariseMedianRange(.data[[.x]], sig_digits = sig_digits, output_n = output_n),
                                                   `Mean (Range)` = SummariseMeanRange(.data[[.x]], sig_digits = sig_digits, output_n = output_n),
+                                                  ` ` = paste0(sum(.data[[.x]]), " (100%)"),
                                                   SummariseSD(.data[[.x]], sig_digits = sig_digits, output_n = output_n)),
                                        .groups = "drop") %>%
                              mutate(Value = "Value") %>%
@@ -186,7 +202,7 @@ GenerateDescriptives <- function(data, col_var = NULL, type = NULL, sig_digits =
                            if(rlang::quo_is_null(enquo_var)){
                              out_tab <- count(data, .data[[.x]])
                            } else {
-                             count(data, .data[[.x]], {{col_var}}) %>% 
+                             out_tab <- count(data, .data[[.x]], {{col_var}}) %>% 
                                pivot_wider(names_from = {{col_var}},  values_from = n, values_fill = 0, names_sort = T) 
                            }
                            # For two way table
@@ -391,6 +407,4 @@ DummyToFactor <- function(dat, dummy_list, id_var, out_var, baseline_group = NUL
 CalculateSphericalEquivalent <- function(sphere, cylinder){
   if_else(cylinder == 0 | is.na(cylinder), sphere, sphere + cylinder/2)
 }
-
-
 

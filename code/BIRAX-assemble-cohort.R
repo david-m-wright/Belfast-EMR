@@ -104,7 +104,7 @@ oct_thickness_raw <- as.data.table(injection_summary_eye)[
 
 
 ## NOA fluid measurements
-  # For each OCT thickness measurement, calculate the time since the first injection (index_date)
+# For each OCT fluid measurement, calculate the time since the first injection (index_date)
 fluid_raw <- as.data.table(injection_summary_eye)[
     , .(PatientID, EyeCode, index_date)][
     # Join injection_summary_eye and oct_thickness tables
@@ -118,6 +118,7 @@ fluid_raw <- as.data.table(injection_summary_eye)[
 ### Assemble eye level dataset (single row per eye) ###
 
 eye_raw <- patients %>% 
+  select(SiteID, PatientID, PerturbedDateofBirth, PerturbedCurrentAge, PerturbedAgeatDeath, Gender) %>% 
   
   # Add diagnoses for AMD, RVO and DMO/DR
   left_join(AMD_patients, by = "PatientID") %>% 
@@ -135,18 +136,18 @@ eye_raw <- patients %>%
   # Join VA measured on the index date or up to 2 weeks prior as the baseline
   left_join(va_raw %>%
               filter(baseline, months_since_index > -0.5 & months_since_index <=0) %>% 
-              transmute(PatientID, EyeCode, EncounterDate, va_logmar, "ETDRS letters" = va_etdrs),
+              transmute(PatientID, EyeCode, va_logmar, "ETDRS letters" = va_etdrs),
             by = c("PatientID", "EyeCode")) %>% 
   
   # Join presence of OCT thickness measurements (closest to index date but up to 2 weeks prior)
-  # Even though an eye may have no baseline it may have later measurements that can be included
+  # Even though an eye may have no baseline (indicating not measured here) it may have later measurements that can be included
   # although change metrics cannot be calculated for these.
   left_join(oct_thickness_raw %>% 
               filter(baseline, months_since_index > -0.5 & months_since_index <=0) %>% 
               transmute(PatientID, EyeCode, thickness_measurement = baseline), 
             by = c("PatientID", "EyeCode")) %>% 
   
-  # Join presence of fluid measurements (closest to index date but upto 2 weeks prior)
+  # Join presence of fluid measurements (closest to index date but up to 2 weeks prior)
   left_join(fluid_raw %>% 
               filter(baseline, months_since_index > -0.5 & months_since_index <=0) %>% 
               transmute(PatientID, EyeCode, fluid_measurement = baseline), 
@@ -156,11 +157,14 @@ eye_raw <- patients %>%
   
   # Exclusion criteria
   mutate(
-    # 50 or older on date of first injection (index date)
-    exclude_age = index_age < 50 |is.na(index_age),
-    
     # Exclude no AMD diagnosis
     exclude_no_AMD = is.na(DiagnosisDescription_AMD),
+    
+    # 50 or older on date of first injection (index date) (or no injections)
+    exclude_age = index_age < 50 | is.na(index_age),
+    
+    # Perturbation of ages makes follow-up period invalid (negative)
+    exclude_age_perturb = years_observed < 0,
     
     # Exclude <3 anti-VEGF injections
     exclude_lt3_injections = if_else(total_injections < 3 | is.na(total_injections), TRUE, FALSE),
@@ -178,33 +182,205 @@ eye_raw <- patients %>%
 
 # Apply the exclusion criteria
 eye <- eye_raw %>% 
-  filter(!exclude_no_AMD, !exclude_age, !exclude_lt3_injections, !exclude_RVO, !exclude_DR_DMO, !exclude_no_va) %>% 
-  select(-matches("exclude")) 
-
+  filter(!exclude_no_AMD, !exclude_age, !exclude_age_perturb, !exclude_lt3_injections,  !exclude_RVO, !exclude_DR_DMO, !exclude_no_va) %>% 
+  select(-matches("exclude")) %>% 
+  
+  # Derived variable categorising index age into decades
+  mutate(Age = cut(index_age, right = F, include.lowest = T, breaks = c(50, 60, 70, 80, 90, max(index_age))),
+       Age = IntervalToInequality(Age, "yrs"))
+  
 
 ## Prepare time series of VA, OCT and fluid measurements for the selected eyes ##
 
 # Just the VA history relating to the selected eyes
-va_history <- va_raw %>% 
+va_history_raw <- va_raw %>% 
   inner_join(eye %>% 
                select(PatientID, EyeCode), by = c("PatientID", "EyeCode")) %>% 
   # Roll forward baseline VA measurements so that all series start at the index date 
   # (max roll forward is 2 weeks)
-  mutate(months_since_index = if_else(baseline & months_since_index < 0, 0, months_since_index))
+  mutate(months_since_index = if_else(baseline & months_since_index > -0.5 & months_since_index < 0, 0, months_since_index)) %>% 
+  # Exclude all measurements prior to baseline
+  filter(months_since_index >= 0)
+
+# Take snapshots of VA at various stages of follow-up
+# Find closest VA measurement to each of the specified snapshot times, within set tolerances
+# Follow-up times in months at which the VA status is to be taken, along with acceptable tolerances
+# Baseline dates must match exactly
+snapshots <- data.table(months_since_index = c(0, 12, 24, 36, 48, 60, 84, 120), 
+                        follow_up_month = c(0, 12, 24, 36, 48, 60, 84, 120), 
+                        tolerance = c(0, 2, 2, 2, 2, 2,2,2),
+                        key = "months_since_index") %>% 
+  .[, `:=` (lower_lim = follow_up_month - tolerance,
+            upper_lim = follow_up_month + tolerance,
+            follow_up_year = as.factor(follow_up_month/12))]
+
+
+# Set keys to join on (so the .on() specification is not needed in the join)
+setkey(snapshots, months_since_index)
+setkey(va_history_raw, months_since_index)
+
+# Identify the VA measurement closest to each of a given set of snapshots for each eye
+# Retain all measurements but mark those that can be used for a snapshot
+# Candidate VA measurement must be within a given tolerance either side of the snapshot time
+# Break ties of equal distance from the snapshot by choosing the earlier VA measurement (rolling back)
+va_history <- snapshots[va_history_raw, roll = "nearest"][
+  , snapshot := .I == .I[which.min(abs(months_since_index - follow_up_month))] &
+    months_since_index >= lower_lim &
+    months_since_index <= upper_lim, by = c("PatientID", "EyeCode", "follow_up_month")][
+
+  # Calculate change in VA from baseline
+  , `:=` (va_change_logmar = va_logmar - va_logmar[(snapshot & baseline)],
+             va_change_etdrs = va_etdrs - va_etdrs[(snapshot & baseline)])
+  , by=.(PatientID, EyeCode)][
+  # Classify VA change into three categories
+  , va_change_lines := cut(va_change_logmar, 
+                               breaks = c(min(va_change_logmar), -0.2, 0.19, max(va_change_logmar)), 
+                               labels = c("gained >=2 lines", "< 2 lines change", "lost >= 2 lines"), include.lowest = TRUE)]
+
+# Note that the 'lines changed' classification breaks down for those with very low vision (e.g. counting fingers)
+# va_history[PatientID=="EB9B623B-3B63-26EF-E293-64A5575590EA" & EyeCode=="L", .(EncounterDate,va_logmar, va_change_logmar, va_etdrs, va_change_etdrs, va_change_lines)]
+  
+
+    va2 %>% 
+    count(va_change_logmar, va_change_etdrs, va_change_lines) %>% 
+    print(n=Inf)
+  
+  va2 %>% filter(va_change_etdrs == 5, va_change_logmar < -0.68) 
+  va2[va_change_logmar == -0.68, .(va_logmar, va_change_logmar, va_etdrs, va_change_etdrs, va_change_lines)]
+  
+  va2[PatientID=="3688F66F-3F74-E6FC-0276-CD9D951686A8" & EyeCode=="R", .(va_logmar, va_change_logmar, va_etdrs, va_change_etdrs, va_change_lines)]
+  
+  va2[PatientID=="EB2DC2F5-9BE0-4B3E-6292-9AC8D95F02BE" & EyeCode=="R", .(EncounterDate,va_logmar, va_change_logmar, va_etdrs, va_change_etdrs, va_change_lines)]
+  va2[PatientID=="EB9B623B-3B63-26EF-E293-64A5575590EA" & EyeCode=="L", .(EncounterDate,va_logmar, va_change_logmar, va_etdrs, va_change_etdrs, va_change_lines)]
+  
+  
+  va3[PatientID=="EB2DC2F5-9BE0-4B3E-6292-9AC8D95F02BE" & EyeCode=="R", .(EncounterDate,va_logmar, va_change_logmar, va_etdrs, va_change_etdrs, va_change_lines)]
+  
+  # Note ETDRS sometimes unreliable
+  va2[PatientID=="EB2DC2F5-9BE0-4B3E-6292-9AC8D95F02BE" & EyeCode=="R" & va_change_logmar == -0.1, .(EncounterDate,va_logmar, va_change_logmar, va_etdrs, va_change_etdrs, va_change_lines)]
+  
+  
+  
+  va_history_raw[PatientID=="EB2DC2F5-9BE0-4B3E-6292-9AC8D95F02BE" & EyeCode=="R" & va_logmar == 0.1, .(EncounterDate,va_logmar, va_etdrs)]
+  va_history[PatientID=="EB2DC2F5-9BE0-4B3E-6292-9AC8D95F02BE" & EyeCode=="R" & va_change_logmar == -0.1, .(EncounterDate,va_logmar, va_change_logmar, va_etdrs, va_change_etdrs, va_change_lines)]
+  
+
+  # va_history[PatientID == "F5D4AFF5-4D1B-7D14-191A-59B99B3FC8B7" & EyeCode == "R" & follow_up_month==48]
+  
+  va2 %>% count(va_change_etdrs, va_change_logmar, va_change_lines) %>% print(n=Inf)  
+
+va2[va_change_etdrs == -40 & va_change_lines == "< 2 lines change",]
+  
+# OCT thickness history relating to the selected eyes
+thickness_history <- oct_thickness_raw %>%  
+  inner_join(eye %>% 
+               filter(thickness_measurement) %>% 
+               select(PatientID, EyeCode), by = c("PatientID", "EyeCode")) %>% 
+  # Roll forward baseline thickness measurements up to 2 weeks prior to baseline
+  mutate(months_since_index = if_else(baseline & months_since_index > -0.5 & months_since_index < 0, 0, months_since_index)) %>% 
+  # Exclude all measurements prior to baseline
+  filter(months_since_index >= 0)
+  # Calculate year of treatment for each eye (since index date)
+  # mutate(treatment_year = as.factor(floor(as.interval(index_date, ExamDate)/dyears()) +1 ))
 
 
 # Fluid history for each eye
 fluid_history <- fluid_raw %>% 
   inner_join(eye %>% 
-               select(PatientID, EyeCode), by = c("PatientID", "EyeCode"))
-
-
-# OCT thickness history relating to the selected eyes
-thickness_history <- oct_thickness_raw %>%  
-  inner_join(eye %>% 
+               filter(fluid_measurement) %>% 
                select(PatientID, EyeCode), by = c("PatientID", "EyeCode")) %>% 
-  # Calculate year of treatment for each eye (since index date)
-  mutate(treatment_year = as.factor(floor(as.interval(index_date, ExamDate)/dyears()) +1 ))
+  # Roll forward baseline fluid measurements up to 2 weeks prior to baseline
+  mutate(months_since_index = if_else(baseline & months_since_index > -0.5 & months_since_index < 0, 0, months_since_index)) %>% 
+  mutate(complete_months = floor(months_since_index)) %>% 
+  # Exclude all measurements prior to baseline
+  filter(months_since_index >= 0) %>% 
+
+  # Classification of AMD type by presence of SRF and IRF
+  mutate(amd_type = factor(case_when(SRF == 1 & IRF == 1 ~ "SRF and IRF",
+                              SRF == 0 & IRF == 1 ~ "IRF only",
+                              SRF == 1 & IRF == 0 ~ "SRF only",
+                              SRF == 0 & IRF == 0 ~ "No fluid"), levels = c("No fluid", "SRF only", "IRF only", "SRF and IRF")))
+
+fluid_history %>% 
+  count(amd_type, baseline)
+
+# Find a single measurement for each eye for each month of followup
+
+
+
+
+## Compare visual acuity and fluid measurements
+va_fl <- eye %>% 
+  inner_join(fluid_history %>% 
+               filter(baseline),
+             by = c("PatientID", "EyeCode"))
+
+va_fl_correlations <- va_fl %>% 
+  select(all_of(c(noa_fluid, noa_retinal, noa_grid)) & where(is.numeric)) %>% 
+  map(~cor.test(.x, va_fl$va_logmar)) %>% 
+  map_dfr(~broom::tidy(.), .id = "Variable") %>% 
+  mutate(across(p.value, format.pval, eps = 0.001, digits = 2),
+         across(c(estimate, conf.low, conf.high), .fns = ~formatC(.x, format = "f", digits = 2))) %>% 
+  mutate(`Correlation with VA` = paste0(estimate, " (", conf.low, ", ", conf.high, ")")) %>% 
+  transmute(Variable, estimate, `Correlation with VA`,  P = p.value)
+
+
+
+
+
+
+baseline_fluid_grid <- fluid_history %>% 
+  filter(baseline) %>% 
+  select(all_of(noa_grid)) %>% 
+  pivot_longer(cols = everything()) %>% 
+  group_by(name) %>% 
+  summarise(valform = paste0(round(mean(value, na.rm = TRUE), 1), " \n(", round(sd(value, na.rm = TRUE), 1), ")")) %>% 
+  mutate(region = toupper(str_sub(str_extract(name, "CS|(Tempo|Nasal|Superior|Inferior)(?=3|6)"), 1, 3)),
+         circ = str_extract(name, "3|6"),
+         circ = as.numeric(if_else(is.na(circ), "1", circ))) %>% 
+  inner_join(noa_dictionary %>% 
+  filter(Category == "ETDRS Grid Parameters"),
+  by = c("name" = "Raw Parameter"))
+
+
+# Function to produce a circular plot of the ETDRS grid with labels corresponding to values in the source data 
+# Args:
+# dat = data.frame with joining columns "region" and "circ" 
+# label_col = bare variable name containing the labels to apply to the grid
+PlotETDRSGrid <- function(dat, label_col){
+  
+  label_value <- enquo(label_col)
+  
+  etdrs_rect <- tibble(region = as_factor(c("CS", "SUP", "NAS", "INF", "TEM", "SUP", "NAS", "INF", "TEM")),
+                       prefix = c("", rep("i", 4), rep("o", 4)),
+                       circ = c(1, rep(3, 4), rep(6, 4)),
+                       xmin = c(0, rep(0.5, 4), rep(1.5, 4)),
+                       xmax = c(0.5, rep(1.5, 4), rep(3, 4)),
+                       ymin = c(0, 0, 0.25, 0.5, 0.75, 0, 0.25, 0.5, 0.75),
+                       ymax = c(1, 0.25, 0.5, 0.75, 1, 0.25, 0.5, 0.75,1),
+                       xtext = c(0, xmax[-1] - (xmax[-1]-xmin[-1])/2),
+                       ytext = c(0, ymax[-1] - (ymax[-1]-ymin[-1])/2))
+  
+  dat %>% 
+    inner_join(etdrs_rect, by = c("region", "circ")) %>% 
+  
+    ggplot(aes(x = xtext, y = ytext)) +
+    geom_rect(data = filter(etdrs_rect, region != "CS"), aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax), fill = "white", colour = "black", size = 1.5) + 
+    geom_rect(data = filter(etdrs_rect, region == "CS"), aes(xmin = xmin+0.01, xmax = xmax-0.01, ymin = ymin+0.01, ymax = ymax-0.01), fill = "white") +
+    geom_text(aes(label = !!label_value)) +
+    scale_y_continuous(breaks = NULL) +
+    scale_x_continuous(breaks = NULL, sec.axis = sec_axis(trans = ~., breaks = NULL, name="Nasal")) +
+    theme_light() +
+    theme(panel.border = element_blank(), panel.grid = element_blank()) +
+    labs(x= "Temporal", y = NULL)+
+    coord_polar(theta = "y", start = 315*pi/180)
+  
+}
+# 
+# baseline_fluid_grid %>% 
+#   filter(str_detect(abbr_metric, "IRF Vol")) %>% 
+#   PlotETDRSGrid(valform) 
+
 
 
 
@@ -238,10 +414,19 @@ treatment_intervals <- injections %>%
   # First and second year since treatment start concept not relevant because do not know the date of first injection (no clinic entry date recorded)
   mutate("Treatment interval" = if_else(treatment_interval_weeks > 12, ">12 weeks", "<=12 weeks"),
          # Calculate month and year of treatment for each eye (since index date)       
-         treatment_months = (interval(index_date, EncounterDate)/dmonths()) + 1,
+         treatment_months = interval(index_date, EncounterDate)/dmonths(),
          treatment_year = as.factor(floor(as.interval(index_date, EncounterDate)/dyears()) + 1)) %>% 
   # Injection sequence (index injection = 1)
   mutate(injection_seq = row_number()) %>% 
   ungroup() %>% 
   mutate(sequence_id = abbreviate(paste(PatientID, EyeCode))) 
+
+
+
+
+
+  
+
+
+
 

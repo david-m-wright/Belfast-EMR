@@ -167,18 +167,7 @@ surgery_ind <- fread(file.path(file_path, "BELSurgeryIndications.txt"))
 
 # Visual acuity
 visual_acuity <- fread(file.path(file_path, "BELVisualAcuity.txt")) %>% 
-  # Converting visual acuity to ETDRS 
-  mutate(cleaned_etdrs = if_else(str_detect(RecordedNotation, "LETTERSCORE"), 
-                                 as.character(va(RecordedNotationBestMeasure, from = "etdrs", to = "etdrs")), as.character(NA)),
-         snellen_to_etdrs = case_when(str_detect(RecordedNotation, "SNELLEN(FEET|METRES)") ~ 
-                                        as.character(va(RecordedNotationBestMeasure, from = "snellen", to = "etdrs")),
-                                      str_detect(RecordedNotation, "SNELLENFRACTION") ~ 
-                                        as.character(va(RecordedNotationBestMeasure, from = "snellendec", to = "etdrs"))),
-         # Note that the 2DP logmar is rounded to 1DP before conversion to ETDRS
-         logmar_to_etdrs = as.character(coalesce(va(Logmar2DBestMeasure, from = "logmar", to = "etdrs"),
-                                                 va(Logmar1DBestMeasure, from = "logmar", to = "etdrs"))),
-         va_etdrs = as.numeric(coalesce(cleaned_etdrs, snellen_to_etdrs, logmar_to_etdrs))) %>% 
-  
+  # Convert visual acuity to logMAR
   mutate(cleaned_logmar = as.character(coalesce(va(Logmar2DBestMeasure, from = "logmar", to = "logmar"), 
                                                 va(Logmar1DBestMeasure, from = "logmar", to = "logmar"))),
          etdrs_to_logmar = if_else(str_detect(RecordedNotation, "LETTERSCORE"), 
@@ -187,8 +176,11 @@ visual_acuity <- fread(file.path(file_path, "BELVisualAcuity.txt")) %>%
                                          as.character(va(RecordedNotationBestMeasure, from = "snellen", to = "logmar")),
                                        str_detect(RecordedNotation, "SNELLENFRACTION") ~ 
                                          as.character(va(RecordedNotationBestMeasure, from = "snellendec", to = "logmar"))),
-         va_logmar = as.numeric(coalesce(cleaned_logmar, snellen_to_logmar, etdrs_to_logmar))) %>% 
-  
+         va_logmar = as.numeric(coalesce(cleaned_logmar, snellen_to_logmar, etdrs_to_logmar)),
+        # Then convert all VA from logMAR to ETDRS
+        # This is preferable to performing a separate conversion from the raw form to ETDRS because there are occasional discrepancies when the type of notation was incorrectly recorded
+        va_etdrs = va(va_logmar, from = "logmar", to = "etdrs")) %>% 
+        
   # Categorise VA into functionally relevant categories
   mutate(va_category_snellen = fct_explicit_na(cut(va_logmar, 
                                                    breaks = c(min(va_logmar, na.rm=TRUE), 0.29, 0.59, 0.99, max(va_logmar, na.rm=TRUE)), 

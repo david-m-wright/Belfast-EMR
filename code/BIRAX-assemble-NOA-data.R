@@ -8,7 +8,8 @@ library(rprojroot)
 file_path <- find_rstudio_root_file("data/BIRAX data") 
 
 # NOA data dictionary
-noa_dictionary <- fread(find_rstudio_root_file("data-dictionary/NOA_dictionary.csv")) 
+noa_dictionary <- fread(find_rstudio_root_file("data-dictionary/NOA_dictionary.csv")) %>% 
+  mutate(abbr_metric = str_squish(str_remove_all(Parameter, "Fluid|CST|Central|Sub Field|(T|t)emporal|Tempo|TS|Nasal|NS|(S|s)uperior|SS|(I|i)nferior|IS|Inner|Outer|3|6|\\(|\\)"))) 
 
 # Assign parameter groups to character vectors for later use
 noa_general <-  noa_dictionary %>% 
@@ -116,6 +117,8 @@ noa <- noa_raw %>%
   ungroup()
 # Translate to data.table for speed?
 
+
+# write_csv(noa, find_rstudio_root_file("data/BIRAX data/NOA-output-assembled.csv"))
 
 ### Sequencing of AVI files ###
 # 
