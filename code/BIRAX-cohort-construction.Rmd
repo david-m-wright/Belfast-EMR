@@ -21,7 +21,7 @@ library(tidyverse)
 
 This analysis is of Electronic Medical Records (EMR) from the Belfast Health and Social Care Trust Macular Service. The aim of the study is to investigate the potential for machine learning to identify factors and biomarkers associated with long-term AMD treatment response.
 
-This document describes construction of the analysis cohort. Pre-processing of the Medisoft and fluid data are described in 'BIRAX-assemble-Medisoft-data-notes.Rmd` and `BIRAX-assemble-NOA-data-notes.Rmd` respectively.
+This document describes construction of the analysis cohort. Pre-processing of the Medisoft and fluid data are described in `BIRAX-assemble-Medisoft-data-notes.Rmd` and `BIRAX-assemble-NOA-data-notes.Rmd` respectively.
 
 ```{r run-analysis, include=FALSE}
 source(find_rstudio_root_file("Code/BIRAX-assemble-cohort.R"))
@@ -52,18 +52,27 @@ Visual acuity
 * Identified baseline VA measurement (closest measurement to index date: earliest date 2 weeks prior, could not occur after index date).   
 * At each VA measurement calculate VA change (logMAR and ETDRS) since the baseline (index date).    
 * Categorise VA change since baseline in ETDRS lines (calculations in logMAR units)).  
-* Identification of the closest VA measurements to each time point of interest during treatment.   
+* Identification of the closest VA measurement to each time point of interest during treatment.   
 
 Diagnoses   
 
-* Identification of eyes with a diagnosis of AMD (`CoPathologyCode` "R316" or "R337" in co-pathology table, or `DiagnosisDescription` containing "AMD" or "age-related macular degeneration" in diagnosis table). Those with "suspected AMD" or "dry AMD" at first diagnosis were excluded (those developing dry AMD later were not excluded)).   
+* Identification of eyes with a diagnosis of AMD (`CoPathologyCode` "R316" or "R337" in `BELCoPathology` table, or `DiagnosisDescription` containing "AMD" or "age-related macular degeneration" in `BELDiagnoses` table). Those with "suspected AMD" or "dry AMD" at first diagnosis were excluded (those developing dry AMD later were not excluded)).   
 * Identification of eyes with a diagnosis of retinal vein or artery occlusions (RVO).   
-* Identification of eyes with a diagnosis of diabetic macular oedema (DMO) or diabetic retinopathy (DR)  (`CoPathologyCode` "R318" in Table \@ref(tab:co-pathology) or `DiagnosisDescription` contining "diabetic macular oedema" in Table \@ref(tab:diagnoses) or any features found in Table \@ref(tab:DR-assessment)).   
+* Identification of eyes with a diagnosis of diabetic macular oedema (DMO) or diabetic retinopathy (DR)  (`CoPathologyCode` "R318" in `BELCoPathology` table or `DiagnosisDescription` containing "diabetic macular oedema" in `BELDiagnoses` table or any features found in `BELDRAssessment` table).   
 
 
 OCT thickness metrics
 
+These metrics were derived from the standard Heidelberg segmentation and give retinal thickness and volume by region of the ETDRS grid.
+
+* Identified baseline OCT thickness measurement (closest measurement to index date: earliest date 2 weeks prior, could not occur after index date).   
+* Identification of the closest OCT measurement to each time point of interest during treatment.    
+
 Fluid measurements
+
+* Identified baseline fluid measurement (closest measurement to index date: earliest date 2 weeks prior, could not occur after index date).   
+* Identification of the closest fluid measurement to each time point of interest during treatment.    
+* Categorised AMD type at each fluid measurement: None/SRF only/IRF only/Both SRF and IRF.   
 
 
 ## Inclusion and exclusion criteria
@@ -78,11 +87,13 @@ EMR for a total of `r nrow(patients)` patients were included in the extracted da
 * The raw data contained `r nrow(eye_raw)` eyes.   
 * `r nrow(filter(eye_raw, exclude_no_AMD))` eyes had no diagnosis of age-related macular degeneration and were excluded. 
 * `r nrow(filter(eye_raw, !exclude_no_AMD, exclude_age))` eyes were in patients aged <50 at the index date and were excluded.
-* `r nrow(filter(eye_raw, !exclude_no_AMD, !exclude_age, exclude_age_perturb))` eyes where perturbation (to protect patient privacy) meant that follow-up periods could not be calculated (gave negative follow-up periods).   
+* `r nrow(filter(eye_raw, !exclude_no_AMD, !exclude_age, exclude_age_perturb))` eyes where event date perturbation to protect patient privacy meant that follow-up periods could not be calculated (gave negative follow-up periods).   
 * `r nrow(filter(eye_raw, !exclude_no_AMD, !exclude_age,  !exclude_age_perturb, exclude_lt3_injections))` eyes had fewer than three anti-VEGF injections during the study period  and were excluded.   
 * `r nrow(filter(eye_raw, !exclude_no_AMD, !exclude_age,  !exclude_age_perturb, !exclude_lt3_injections, exclude_RVO))` eyes had a diagnosis of RVO at any point during the study period and were excluded.   
 * `r nrow(filter(eye_raw, !exclude_no_AMD, !exclude_age,  !exclude_age_perturb, !exclude_lt3_injections, !exclude_RVO, exclude_DR_DMO))` eyes had a diagnosis of DMO/DR at any point during the study period and were excluded.   
 * `r nrow(filter(eye_raw, !exclude_no_AMD, !exclude_age,  !exclude_age_perturb, !exclude_lt3_injections, !exclude_RVO, !exclude_DR_DMO, exclude_no_va))` eyes did not have a visual acuity assessment within 2 weeks prior to or including the index date and were excluded.   
+* `r nrow(filter(eye_raw, !exclude_no_AMD, !exclude_age,  !exclude_age_perturb, !exclude_lt3_injections, !exclude_RVO, !exclude_DR_DMO, !exclude_no_va, exclude_no_thickness))` eyes did not have an OCT retinal thickness measurement within 2 weeks prior to or including the index date and were excluded.   
+* `r nrow(filter(eye_raw, !exclude_no_AMD, !exclude_age,  !exclude_age_perturb, !exclude_lt3_injections, !exclude_RVO, !exclude_DR_DMO, !exclude_no_va, !exclude_no_thickness, exclude_no_fluid))` eyes did not have a retinal fluid measurement within 2 weeks prior to or including the index date and were excluded.   
 
 
 A total of `r nrow(eye)` eyes from `r nrow(distinct(eye, PatientID))` patients remained after these exclusions. A total of `r nrow(injections)` injections were observed for the cohort, allowing `r nrow(treatment_intervals)` treatment intervals to be observed (between injections). 
@@ -95,9 +106,7 @@ Descriptive statistics for the eyes included in the analysis are given in Tables
 
 ```{r descriptives}
 eye %>%
-   transmute(Age = index_age, Gender, 
-             `OCT thickness measured` = thickness_measurement, 
-             `OCT fluid measured` = fluid_measurement, Eyes = " ") %>%
+   transmute(Age = index_age, Gender, Eyes = " ") %>%
   GenerateDescriptives(type = c(Age = "Mean (Range)")) %>%
   kbl(caption = "Baseline characteristics of eyes with AMD. Frequency and percentage reported for categorical variables.") %>%
   kable_paper()
@@ -186,7 +195,7 @@ by = c("PatientID", "EyeCode")) %>%
 
 ## Retinal fluid distribution
 
-General scan characteristics in terms of the number of B-scans taken and the number in which fluid were detected is given in Table \@ref(tab:fluid-general-baseline). The presence and volume of intra-retinal fluid (IRF), sub-retinal fluid (SRF) and total retinal fluid (TRF) is given in Table \@ref(tab:fluid-baseline), along with estimated correlations between each of the continuous measurements and visual acuity (logMAR). Measurements of retinal volume and the presence of vitreo-macula interface or retinal pigmentary epithelium (RPE) irregularities and detachments is given in Table \@ref(tab:fluid-retinal-baseline). Measurements of fluid and retinal thickness are given for each of the regions on an ETDRS grid region are given in Table \@ref(tab:fluid-grid-baseline).
+General scan characteristics in terms of the number of B-scans taken and the number in which fluid were detected is given in Table \@ref(tab:fluid-general-baseline). The presence and volume of intra-retinal fluid (IRF), sub-retinal fluid (SRF) and total retinal fluid (TRF) is given in Table \@ref(tab:fluid-baseline), along with estimated correlations between each of the continuous measurements and visual acuity (logMAR). Measurements of retinal volume and the presence of vitreo-macula interface or retinal pigmentary epithelium (RPE) irregularities and detachments is given in Table \@ref(tab:fluid-retinal-baseline). Measurements of fluid and retinal thickness are given for each of the regions on an ETDRS grid are given in Table \@ref(tab:fluid-grid-baseline).
 
 ```{r fluid-general-baseline}
 fluid_history %>% 
@@ -244,7 +253,7 @@ fluid_history %>%
    relocate(Parameter, .after = Variable) %>% 
    arrange(desc(estimate)) %>% 
    select(-estimate) %>% 
-   kbl(caption = "Distribution of NOA OCT fluid measurements at baseline.") %>% 
+   kbl(caption = "Distribution of NOA OCT fluid measurements at baseline, sorted by strength of correlation with visual acuity.") %>% 
    kable_paper()
 ```
 
@@ -262,6 +271,7 @@ fluid_history %>%
    kbl(caption = "Distribution of NOA OCT fluid measurements at baseline by age category.") %>% 
    kable_paper()
 ```
+
 ```{r fluid-baseline-by-gender}
 fluid_history %>% 
   filter(baseline) %>% 
@@ -278,7 +288,7 @@ fluid_history %>%
 ```
 
 
-```{r fluid-retinal-baseline-by-age}
+```{r fluid-retinal-baseline}
 fluid_history %>% 
   filter(baseline) %>% 
   select(all_of(noa_retinal)) %>% 
@@ -309,6 +319,7 @@ fluid_history %>%
    kbl(caption = "Distribution of NOA OCT retinal measurements at baseline by age category.") %>% 
    kable_paper()
 ```
+
 ```{r fluid-retinal-baseline-by-gender}
 fluid_history %>% 
   filter(baseline) %>% 
@@ -324,20 +335,20 @@ fluid_history %>%
    kable_paper()
 ```
 
-```{r fluid-grid-plot, fig.cap = "Distribution of retinal fluid at baseline by ETDRS grid region: mean (standard deviation).", fig.height=12, fig.width=8}
+```{r fluid-grid-plot, fig.cap = "Distribution of retinal fluid at baseline by ETDRS grid region: mean (standard deviation). Thicknesses measured in um, volumes in nl.", fig.height=12, fig.width=8}
 baseline_fluid_grid %>% 
   filter(str_detect(abbr_metric, "SRF|IRF|TRF")) %>% 
   PlotETDRSGrid(valform) +
   facet_wrap(~abbr_metric, ncol = 2)
 ```
-```{r RPE-grid-plot, fig.cap = "Distribution of RPE irregularities at baseline by ETDRS grid region: mean (standard deviation).", fig.height=4, fig.width=8}
+```{r RPE-grid-plot, fig.cap = "Distribution of RPE irregularities at baseline by ETDRS grid region: mean (standard deviation). Thicknesses measured in um, volumes in nl.", fig.height=4, fig.width=8}
 baseline_fluid_grid %>% 
   filter(str_detect(abbr_metric, "RPE")) %>% 
   PlotETDRSGrid(valform) +
   facet_wrap(~abbr_metric, ncol = 2)
 ```
 
-```{r retina-grid-plot, fig.cap = "Distribution of retinal thickness at baseline by ETDRS grid region: mean (standard deviation).", fig.height=4, fig.width=8}
+```{r retina-grid-plot, fig.cap = "Distribution of retinal thickness at baseline by ETDRS grid region: mean (standard deviation). Thicknesses measured in um, volumes in nl.", fig.height=4, fig.width=8}
 baseline_fluid_grid %>% 
   filter(str_detect(abbr_metric, "retina")) %>% 
   PlotETDRSGrid(valform) +
@@ -359,74 +370,6 @@ fluid_history %>%
    select(-estimate) %>% 
    kbl(caption = "Distribution of NOA OCT fluid and retinal measurements at baseline by ETDRS grid region, sorted by strength of correlation with visual acuity.") %>% 
    kable_paper()
-```
-
-## VA distribution
-
-```{r va-baseline-histogram}
-eye %>% 
-  ggplot(aes(x = va_logmar)) +
-  geom_histogram(bins = 40) +
-  theme_light()
-```
-
-## Fluid distribution at baseline
-
-```{r fluid-types}
-fluid_history %>% 
-  filter(baseline) %>% 
-  ggplot(aes(x = SRFVolumeNl, y = IRFVolumeNl)) +
-  geom_point() +
-  # scale_y_log10() +
-  # scale_x_log10() +
-  scale_y_sqrt() +
-  scale_x_sqrt() +
-  theme_light()
-
-cor.test(~IRFVolumeNl + SRFVolumeNl, data = filter(fluid_history, baseline))
-```
-
-## Types of AMD by fluid presence or absence
-
-```{r amd-types}
-fluid_history %>% filter(baseline) %>% 
- count(SRF, IRF) %>% 
-  adorn_totals() %>% 
-  adorn_percentages("col") %>% 
-  adorn_pct_formatting() %>% 
-  adorn_ns("front") %>% 
-  kbl(caption = "Presence/absence distribution of IRF and SRF.") %>% 
-  kable_paper()
-```
-
-# Descriptive statistics during follow-up
-
-Proportion injected by month of follow-up and AMD type.
-Cumulative injections by month?
-
-Probability of fluid by month of follow-up.
-
-Quantity of fluid by month of follow-up (among those with fluid)
-
-
-Clustering by fluid trajectory - supervised or unsupervised?
-
-```{r fluid-history}
-
-fluid_history %>% 
-  ggplot(aes(x = months_since_index, y = IRFVolumeNl)) +
-  geom_point() + 
-  geom_smooth() + 
-  lims(y = c(0, 3000))
-
-fluid_history %>%
-  filter(complete_months <= 60, IRF == 1) %>% 
-  mutate(across(complete_months, as.factor)) %>% 
-  ggplot(aes(x = complete_months, y = IRFVolumeNl)) +
-  geom_boxplot() +
-  lims(y = c(0, 1000))
-
-
 ```
 
 
