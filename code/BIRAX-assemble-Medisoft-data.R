@@ -159,6 +159,18 @@ post_op <- fread(file.path(file_path, "BELPostOperativeComplications.txt"))
 patients <- fread(file.path(file_path, "BELPatientDetails.txt")) %>% 
   mutate(across(c(Gender, EthnicDesc),  ~fct_explicit_na(as.factor(.), na_level = "Missing")))
 
+
+# Anchor ages to events
+patients %>% 
+  mutate(curr_age = as.interval(PerturbedDateofBirth, ExtractDate)/dyears())
+# Overall lifespan is correct - gives current age/age at death
+# Differences between index date and other visits, along with extract date, are correct.
+# For those still alive the extract date is the end of observation? - yes
+# Final visit may be before the end of observation but the patient could still technically have reappeared unless dead.
+# So deaths not anchored in time correctly.
+# Therefore, for those that died the end of observation is not known.
+
+
 # Surgery
 surgery <- fread(file.path(file_path, "BELSurgery.txt"))
 
@@ -166,35 +178,41 @@ surgery <- fread(file.path(file_path, "BELSurgery.txt"))
 surgery_ind <- fread(file.path(file_path, "BELSurgeryIndications.txt")) 
 
 # Visual acuity
-visual_acuity <- fread(file.path(file_path, "BELVisualAcuity.txt")) %>% 
-  # Convert visual acuity to logMAR
-  mutate(cleaned_logmar = as.character(coalesce(va(Logmar2DBestMeasure, from = "logmar", to = "logmar"), 
-                                                va(Logmar1DBestMeasure, from = "logmar", to = "logmar"))),
-         etdrs_to_logmar = if_else(str_detect(RecordedNotation, "LETTERSCORE"), 
-                                   as.character(va(RecordedNotationBestMeasure, from = "etdrs", to = "logmar")), as.character(NA)),
-         snellen_to_logmar = case_when(str_detect(RecordedNotation, "SNELLEN(FEET|METRES)") ~ 
-                                         as.character(va(RecordedNotationBestMeasure, from = "snellen", to = "logmar")),
-                                       str_detect(RecordedNotation, "SNELLENFRACTION") ~ 
-                                         as.character(va(RecordedNotationBestMeasure, from = "snellendec", to = "logmar"))),
-         va_logmar = as.numeric(coalesce(cleaned_logmar, snellen_to_logmar, etdrs_to_logmar)),
-        # Then convert all VA from logMAR to ETDRS
-        # This is preferable to performing a separate conversion from the raw form to ETDRS because there are occasional discrepancies when the type of notation was incorrectly recorded
-        va_etdrs = va(va_logmar, from = "logmar", to = "etdrs")) %>% 
-        
-  # Categorise VA into functionally relevant categories
-  mutate(va_category_snellen = fct_explicit_na(cut(va_logmar, 
-                                                   breaks = c(min(va_logmar, na.rm=TRUE), 0.29, 0.59, 0.99, max(va_logmar, na.rm=TRUE)), 
-                                                   labels = c("Good (VA>6/12)", "Moderate (6/24 < VA <= 6/12)", "Partially sighted (6/60 < VA <= 6/24)", "Blind (VA <= 6/60)"), 
-                                                   include.lowest = TRUE),
-                                               na_level = "Missing"), 
-         va_category_etdrs = fct_explicit_na(cut(va_etdrs,
-                                                 breaks = c(0, 32, 73, 100),
-                                                 labels = c("<33 letters", "33-73 letters", ">73 letters"), include.lowest = T),
-                                             na_level = "Missing")) %>% 
-  # Take best VA measurement on a given day
-  group_by(PatientID, EyeCode, EncounterDate) %>% 
-  slice_min(va_logmar, n=1, with_ties = FALSE) %>% 
-  ungroup()
+# fread(file.path(file_path, "BELVisualAcuity.txt")) %>% 
+#   # Convert visual acuity to logMAR
+#   mutate(cleaned_logmar = as.character(coalesce(va(Logmar2DBestMeasure, from = "logmar", to = "logmar"), 
+#                                                 va(Logmar1DBestMeasure, from = "logmar", to = "logmar"))),
+#          etdrs_to_logmar = if_else(str_detect(RecordedNotation, "LETTERSCORE"), 
+#                                    as.character(va(RecordedNotationBestMeasure, from = "etdrs", to = "logmar")), as.character(NA)),
+#          snellen_to_logmar = case_when(str_detect(RecordedNotation, "SNELLEN(FEET|METRES)") ~ 
+#                                          as.character(va(RecordedNotationBestMeasure, from = "snellen", to = "logmar")),
+#                                        str_detect(RecordedNotation, "SNELLENFRACTION") ~ 
+#                                          as.character(va(RecordedNotationBestMeasure, from = "snellendec", to = "logmar"))),
+#          va_logmar = as.numeric(coalesce(cleaned_logmar, snellen_to_logmar, etdrs_to_logmar)),
+#         # Then convert all VA from logMAR to ETDRS
+#         # This is preferable to performing a separate conversion from the raw form to ETDRS because there are occasional discrepancies when the type of notation was incorrectly recorded
+#         va_etdrs = va(va_logmar, from = "logmar", to = "etdrs")) %>% 
+#         
+#   # Categorise VA into functionally relevant categories
+#   mutate(va_category_snellen = fct_explicit_na(cut(va_logmar, 
+#                                                    breaks = c(min(va_logmar, na.rm=TRUE), 0.29, 0.59, 0.99, max(va_logmar, na.rm=TRUE)), 
+#                                                    labels = c("Good (VA>6/12)", "Moderate (6/24 < VA <= 6/12)", "Partially sighted (6/60 < VA <= 6/24)", "Blind (VA <= 6/60)"), 
+#                                                    include.lowest = TRUE),
+#                                                na_level = "Missing"), 
+#          va_category_etdrs = fct_explicit_na(cut(va_etdrs,
+#                                                  breaks = c(0, 32, 73, 100),
+#                                                  labels = c("<33 letters", "33-73 letters", ">73 letters"), include.lowest = T),
+#                                              na_level = "Missing")) %>% 
+#   # Take best VA measurement on a given day
+#   group_by(PatientID, EyeCode, EncounterDate) %>% 
+#   slice_min(va_logmar, n=1, with_ties = FALSE) %>% 
+#   ungroup() %>% 
+# 
+#   # Converting visual acuities is slow
+#   # Save converted version for faster processing
+#   fwrite(file = file.path(file_path, "VisualAcuityLogMAR.csv"))
+
+visual_acuity <- fread(file.path(file_path, "VisualAcuityLogMAR.csv"))
 
 
 # Injections
@@ -215,11 +233,14 @@ injections_clean <- injections_raw %>%
   #           by = c("PatientID", "EyeCode", "EncounterDate")) 
 
 # OCT thickness maps
-oct_thickness <- fread(file.path(file_path, "OCT_ThicknessMetrics.txt")) %>% 
-  # Select a single scan for each eye and date
-  group_by(PatientID, EyeCode, ExamDate) %>% 
-  # ScanSeq is the latest exam for that eye on that date
-  slice_min(order_by = ScanSeq, with_ties = FALSE) %>% 
-  ungroup()
+# Save output for speed
+# fread(file.path(file_path, "OCT_ThicknessMetrics.txt")) %>% 
+#   # Select a single scan for each eye and date
+#   group_by(PatientID, EyeCode, ExamDate) %>% 
+#   # ScanSeq is the latest exam for that eye on that date
+#   slice_min(order_by = ScanSeq, with_ties = FALSE) %>% 
+#   ungroup() %>% 
+#   fwrite(file.path(file_path, "OCT_ThicknessMetricsDistinct.csv"))
 
+oct_thickness <- fread(file.path(file_path, "OCT_ThicknessMetricsDistinct.csv"))
 
