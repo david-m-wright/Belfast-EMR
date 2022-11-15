@@ -79,6 +79,8 @@ va_raw <- as.data.table(injection_summary_eye)[, .(PatientID, EyeCode, index_dat
   as.data.table(visual_acuity), .(PatientID, EyeCode, index_date, EncounterDate, va_logmar, va_etdrs, va_category_snellen), on = .(PatientID, EyeCode)][
   # Calculate months since index date
   , months_since_index:=as.interval(index_date, EncounterDate)/dmonths()][
+    # Calculate years ince index date
+  , years_since_index := as.interval(index_date, EncounterDate)/dyears()][  
   # Mark baseline measurements (closest measurement to baseline)  
   , baseline := abs(months_since_index) == min(abs(months_since_index)), by = .(PatientID, EyeCode)]
 
@@ -134,13 +136,22 @@ eye_raw <- patients %>%
   left_join(RVO_patients, by = c("PatientID", "EyeCode")) %>% 
   left_join(DMO_DR_patients, by = c("PatientID", "EyeCode")) %>% 
   
-  # Calculate age at first injection (index date)
+    # Calculate age at first injection (index date)
   left_join(injection_summary_eye, by = c("PatientID", "EyeCode")) %>% 
-  mutate(index_age =  as.interval(PerturbedDateofBirth, index_date)/dyears()) %>% 
-  # Calculate years observed (index to current age/death)
-  mutate(years_observed = coalesce(PerturbedCurrentAge, PerturbedAgeatDeath) - index_age) %>% 
+  mutate(index_age =  interval(PerturbedDateofBirth, index_date)/dyears()) %>% 
   # Calculate years treated (index to final injection)
   mutate(years_treated = interval(index_date, final_injection_date)/dyears()) %>% 
+  # Calculate age at end of VA monitoring
+  left_join(va_raw[!is.na(years_since_index), by = .(PatientID, EyeCode), .(years_va = max(years_since_index))],
+            by = c("PatientID", "EyeCode")) %>% 
+    # Calculate years observed (index to current age/death)
+  mutate(years_observed = coalesce(PerturbedCurrentAge, PerturbedAgeatDeath) - index_age) %>% 
+  # For ~10% of eyes years_treated is greater than years_observed by up to half a year
+  # (likely to be due to date perturbation for privacy reasons)
+  # ~ 5% of eyes longer VA than observation time
+  # Where this occurs, set years observed to the greater of the three
+  mutate(years_observed = pmax(years_treated, years_va, years_observed)) %>% 
+  
   
   # Join VA measured on the index date or up to 2 weeks prior as the baseline
   left_join(va_raw %>%
@@ -198,7 +209,7 @@ eye_raw <- patients %>%
 
 # Apply the exclusion criteria
 eye <- eye_raw %>% 
-  filter(!exclude_no_AMD, !exclude_age, !exclude_age_perturb, !exclude_lt3_injections,  !exclude_RVO, !exclude_DR_DMO, !exclude_no_va, !exclude_no_thickness, !exclude_no_fluid) %>% 
+  filter(!exclude_no_AMD, !exclude_age, !exclude_lt3_injections,  !exclude_RVO, !exclude_DR_DMO, !exclude_no_va, !exclude_no_thickness, !exclude_no_fluid) %>% 
   select(-matches("exclude")) %>% 
   
   # Derived variable categorising index age into decades
@@ -229,6 +240,7 @@ snapshots <- data.table(months_since_index = c(0, 12, 24, 36, 48, 60, 84, 120),
                         key = "months_since_index") %>% 
   .[, `:=` (lower_lim = follow_up_month - tolerance,
             upper_lim = follow_up_month + tolerance,
+            yr = follow_up_month/12,
             follow_up_year = as.factor(follow_up_month/12))]
 
 
@@ -293,7 +305,8 @@ fluid_history_raw <- fluid_raw %>%
                select(PatientID, EyeCode), by = c("PatientID", "EyeCode")) %>% 
   # Roll forward baseline fluid measurements up to 2 weeks prior to baseline
   mutate(months_since_index = if_else(baseline & months_since_index > -0.5 & months_since_index < 0, 0, months_since_index)) %>% 
-  mutate(complete_months = floor(months_since_index)) %>% 
+  # Assign each measurement to a treatment month (baseline = zero, within first month of treatment = 1)
+  mutate(treatment_months = ceiling(months_since_index)) %>% 
   # Exclude all measurements prior to baseline
   filter(months_since_index >= 0) %>% 
 
@@ -409,7 +422,8 @@ injections <- injections_clean %>%
                select(PatientID, EyeCode, index_date), by = c("PatientID", "EyeCode")) %>% 
   # Calculate year of treatment for each eye (since index date)
   # Starts count at year 1
-  mutate(treatment_year = as.factor(floor(as.interval(index_date, EncounterDate)/dyears()) +1))
+  mutate(years_treated = as.interval(index_date, EncounterDate)/dyears(),
+         treatment_year = as.factor(floor(years_treated) +1))
 
 # Note that some injections for selected eyes were in other clinic types e.g. cataract or glaucoma
 # This may be because an incorrect clinic type was set at the beginning of the day or because of a genuine clinical need

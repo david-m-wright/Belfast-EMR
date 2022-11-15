@@ -40,10 +40,12 @@ Injections
 * Removal of a small number of duplicate injection entries.   
 * Identification of the first injection recorded for each eye and the date (the index date).   
 * Calculation of treatment intervals.   
+* Calculate the total time under treatment.
 
 Patient demographics    
 
-* Calculation of patient ages at the index date and at study period end and total observation period for each eye.   
+* Calculation of patient ages at the index date and at study period end and total observation period for each eye (index age to age at death or study period end, whichever was sooner).    
+* In ~10% of cases the total time under treatment was greater than the calculated observation period by up to half a year. This is likely to have been linked to the date perturbation. Where this occured set the total observation period equal to the total time under treatment.   
 
 Visual acuity
 
@@ -87,13 +89,12 @@ EMR for a total of `r nrow(patients)` patients were included in the extracted da
 * The raw data contained `r nrow(eye_raw)` eyes.   
 * `r nrow(filter(eye_raw, exclude_no_AMD))` eyes had no diagnosis of age-related macular degeneration and were excluded. 
 * `r nrow(filter(eye_raw, !exclude_no_AMD, exclude_age))` eyes were in patients aged <50 at the index date and were excluded.
-* `r nrow(filter(eye_raw, !exclude_no_AMD, !exclude_age, exclude_age_perturb))` eyes where event date perturbation to protect patient privacy meant that follow-up periods could not be calculated (gave negative follow-up periods).   
-* `r nrow(filter(eye_raw, !exclude_no_AMD, !exclude_age,  !exclude_age_perturb, exclude_lt3_injections))` eyes had fewer than three anti-VEGF injections during the study period  and were excluded.   
-* `r nrow(filter(eye_raw, !exclude_no_AMD, !exclude_age,  !exclude_age_perturb, !exclude_lt3_injections, exclude_RVO))` eyes had a diagnosis of RVO at any point during the study period and were excluded.   
-* `r nrow(filter(eye_raw, !exclude_no_AMD, !exclude_age,  !exclude_age_perturb, !exclude_lt3_injections, !exclude_RVO, exclude_DR_DMO))` eyes had a diagnosis of DMO/DR at any point during the study period and were excluded.   
-* `r nrow(filter(eye_raw, !exclude_no_AMD, !exclude_age,  !exclude_age_perturb, !exclude_lt3_injections, !exclude_RVO, !exclude_DR_DMO, exclude_no_va))` eyes did not have a visual acuity assessment within 2 weeks prior to or including the index date and were excluded.   
-* `r nrow(filter(eye_raw, !exclude_no_AMD, !exclude_age,  !exclude_age_perturb, !exclude_lt3_injections, !exclude_RVO, !exclude_DR_DMO, !exclude_no_va, exclude_no_thickness))` eyes did not have an OCT retinal thickness measurement within 2 weeks prior to or including the index date and were excluded.   
-* `r nrow(filter(eye_raw, !exclude_no_AMD, !exclude_age,  !exclude_age_perturb, !exclude_lt3_injections, !exclude_RVO, !exclude_DR_DMO, !exclude_no_va, !exclude_no_thickness, exclude_no_fluid))` eyes did not have a retinal fluid measurement within 2 weeks prior to or including the index date and were excluded.   
+* `r nrow(filter(eye_raw, !exclude_no_AMD, !exclude_age, exclude_lt3_injections))` eyes had fewer than three anti-VEGF injections during the study period  and were excluded.   
+* `r nrow(filter(eye_raw, !exclude_no_AMD, !exclude_age, !exclude_lt3_injections, exclude_RVO))` eyes had a diagnosis of RVO at any point during the study period and were excluded.   
+* `r nrow(filter(eye_raw, !exclude_no_AMD, !exclude_age,  !exclude_lt3_injections, !exclude_RVO, exclude_DR_DMO))` eyes had a diagnosis of DMO/DR at any point during the study period and were excluded.   
+* `r nrow(filter(eye_raw, !exclude_no_AMD, !exclude_age,  !exclude_lt3_injections, !exclude_RVO, !exclude_DR_DMO, exclude_no_va))` eyes did not have a visual acuity assessment within 2 weeks prior to or including the index date and were excluded.   
+* `r nrow(filter(eye_raw, !exclude_no_AMD, !exclude_age,  !exclude_lt3_injections, !exclude_RVO, !exclude_DR_DMO, !exclude_no_va, exclude_no_thickness))` eyes did not have an OCT retinal thickness measurement within 2 weeks prior to or including the index date and were excluded.   
+* `r nrow(filter(eye_raw, !exclude_no_AMD, !exclude_age,  !exclude_lt3_injections, !exclude_RVO, !exclude_DR_DMO, !exclude_no_va, !exclude_no_thickness, exclude_no_fluid))` eyes did not have a retinal fluid measurement within 2 weeks prior to or including the index date and were excluded.   
 
 
 A total of `r nrow(eye)` eyes from `r nrow(distinct(eye, PatientID))` patients remained after these exclusions. A total of `r nrow(injections)` injections were observed for the cohort, allowing `r nrow(treatment_intervals)` treatment intervals to be observed (between injections). 

@@ -1,0 +1,155 @@
+---
+title: "BIRAX study - fluid dynamics"
+author: "David M Wright - d.wright@qub.ac.uk"
+date: "Document compiled: `r Sys.Date()`"
+output: 
+  bookdown::html_document2:
+     toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(knitr)
+library(kableExtra)
+library(rprojroot)
+library(tidyverse)
+```
+
+`r R.version.string`   
+
+
+```{r run-analysis, include=FALSE}
+source(find_rstudio_root_file("Code/BIRAX-fluid-dynamics.R"))
+```
+
+# Introduction
+
+This analysis is of Electronic Medical Records (EMR) from the Belfast Health and Social Care Trust Macular Service. The aim of the study is to investigate the potential for machine learning to identify factors and biomarkers associated with long-term AMD treatment response.
+
+This document describes the temporal distribution of retinal fluid in an analysis cohort of patients beginning anti-VEGF treatment for wet AMD. Cohort construction is described in 'BIRAX-cohort-construction.Rmd`.
+
+A total of `r nrow(fluid_history)` fluid measurements of `r nrow(eye)` eyes from `r nrow(distinct(eye, PatientID))` patients were included in the analysis.
+
+## Fluid distribution at baseline
+
+There was a weak positive correlation between IRF and SRF volumes at baseline (r = `r round(cor.test(~IRFVolumeNl + SRFVolumeNl, data = filter(fluid_history, baseline))$estimate, digits = 3)`). Both distributions had a strong positive skew, with the majority of eyes having very little fluid and a minority having very large quantities (Figure \@ref(fig:fluid-types)). Some eyes had no fluid at baseline and around 36% of eyes had only one type of fluid at baseline (Table \@ref(tab:amd-types)).
+
+```{r fluid-types, fig.cap= "Distribution of Intra-retinal and Sub-retinal fluid volumes at baseline. Axes are on square root scale."}
+fluid_history %>% 
+  filter(baseline) %>% 
+  ggplot(aes(x = SRFVolumeNl, y = IRFVolumeNl)) +
+  geom_point() +
+  geom_density_2d() +
+  scale_y_sqrt() +
+  scale_x_sqrt() +
+  theme_light()
+```
+
+```{r amd-types}
+fluid_history %>% filter(baseline) %>% 
+ count(SRF, IRF) %>% 
+  adorn_totals() %>% 
+  adorn_percentages("col") %>% 
+  adorn_pct_formatting() %>% 
+  adorn_ns("front") %>% 
+  kbl(caption = "Presence or absence of IRF and SRF at baseline.") %>% 
+  kable_paper()
+```
+
+# Fluid measurements during follow-up
+
+Baseline measurements were taken at or slightly before the date of the first anti-VEGF injection for the eye (see cohort construction paper for details). Subsequent measurements were classified by the month of treatment in which they occurred. For example, a measurement two weeks after baseline was assigned to treatment month 1 (i.e. taking the ceiling of the raw date stamp). 
+
+The number of fluid measurements in the first month of treatment was substantially lower than the number taken at baseline. Measurements increased between the second and fourth months before decreasing steadily with minor fluctuations thereafter (Figure \@ref(fig:fluid-measurement-count)). This pattern is likely to reflect the reduced monitoring of patients during the initial loading phase, followed by gradual attrition of the cohort. To produce stable statistical estimates and trend plots, subsequent analyses consider only the period $\leq$ `r trunc_month` months, after which the number of measurements per month drops below `r trunc_n`. 
+
+```{r fluid-measurement-count, fig.cap="Number of fluid measurements per month of follow-up. Some eyes were measured multiple times in the same month. Time zero indicates the baseline measurement."}
+fluid_history %>% 
+  count(treatment_months) %>% 
+  ggplot(aes(x = treatment_months, y = n)) +
+  geom_line(size = 1) +
+  theme_light()
+```
+
+# Fluid distribution during follow-up
+
+During the first four months of treatment there was a substantial increase in the proportion of eyes with no fluid detected, with the most rapid increase during the first month of treatment. This was mirrored by a rapid decrease in proportion of eyes with both SRF and IRF and to a lesser extent in the proportion of eyes with SRF only. The proportion of eyes with IRF only increased during the first four months. The proportion of eyes with no fluid decreased again up to the six month point and then fluctuated around a third for the remainder of followup. From six months on, the proportion of eyes with IRF only and both SRF and IRF increased gradually. The proportion of eyes with SRF only decreased steadily over time.
+
+
+```{r amd-type-follow-up, fig.cap="Presence of SRF and IRF by treatment month."}
+fluid_history %>% 
+  filter(treatment_months <= trunc_month) %>% 
+  group_by(treatment_months) %>% 
+  count(amd_type) %>%  
+  mutate(`Proportion of eyes` = n/sum(n)) %>% 
+  ggplot(aes(x = treatment_months, y = `Proportion of eyes`)) +
+  geom_line(aes(colour = amd_type), size = 1) +
+  theme_light()
+# Need to look at transitions SRF->IRF
+# Which eyes are switching. How often do they switch?
+```
+
+Because a large proportion of eyes have little or no fluid and there are very large outlying measurements (the strong positive skew for IRF and SRF volumes in Figure \@ref(fig:fluid-types)), quantile plots were used in preference to boxplots to illustrate changes in distribution of fluid volumes over time (Figure \@ref(fig:fluid-quantiles)). For both IRF and SRF, values below the 80th percentile were close to zero throughout the study period. For both IRF and SRF there was a sharp initial decrease in fluid volumes followed by a slight increase in the next 3-4 months and then fluctuations around constant levels for the remainder of follow-up.
+
+```{r fluid-quantiles, fig.cap= "Quantiles of fluid volume per month of follow-up. Quantiles above 90% are much higher and more variable and are excluded for display purposes.", fig.width=9, fig.height = 4}
+fluid_qtl %>% 
+  filter(treatment_months <= trunc_month) %>% 
+  ggplot(aes(x = treatment_months, y = volume)) +
+  geom_line(aes(colour = Quantile), size = 1, alpha = 0.5) +
+  facet_wrap(~fluid_type) +
+  theme_light()
+```
+Figure \@ref(fig:fluid-types) averagea across changes at the individual eye level and thus hides considerable variation in the fluid volumes within and among eyes. Eyes may show rapid increases in fluid volume such that they may enter the upper quantiles of the fluid volume distribution before dropping down again in response to treatment, being replaced by others in the upper quantiles (Figure \@ref(fig:fluid-history-sample)). Also, eyes vary in both the number and timing of fluid measurements and the number of eyes included in the distribution decreases over time as eyes leave the cohort. 
+
+```{r fluid-history-sample, fig.cap="Changes in fluid volume for a sample of eyes.", warning = FALSE}
+eye %>% 
+  distinct(PatientID, EyeCode) %>% 
+  slice(1:20) %>% 
+  inner_join(fluid_history, by = c("PatientID", "EyeCode")) %>% 
+  mutate(eye_id = paste(PatientID, EyeCode)) %>% 
+  pivot_longer(cols = c(IRFVolumeNl, SRFVolumeNl), names_to = "fluid_type", values_to = "volume") %>% 
+  ggplot(aes(x = treatment_months, y = volume, group = eye_id)) +
+  geom_line(aes(colour = eye_id), size = 1, alpha = 0.5) +
+  facet_wrap(~fluid_type) +
+  guides(colour = "none") +
+  lims(y = c(0, 200)) +
+  theme_light()
+```
+
+# Clustering of treatment responses
+
+Whilst the averaging in Figure \@ref(fig:fluid-types) hides the diversity of responses to treatment, the eye level trajectories shown in Figure \@ref(fig:fluid-history-sample) are clearly too variable to describe coherently across the entire dataset. Therefore, it is necessary to summarise measurements at an intermediate level to capture underlying patterns of variability in treatment response.
+
+In this analysis we seek to determine whether there are broad differences in treatment response across the cohort. Specifically, whether there are clusters of eyes that respond well to treatment and remain stable long term (i.e. with no fluid) and whether there are clusters that show more chaotic responses that are likely to result in more rapid loss of vision. 
+
+Standard clustering algorithms are unsuitable for these data because they require sequences measured at the same time points and of equal length. Therefore, it is necessary to align sequences to a common length and then calculate the mathematical distances between each sequence to perform the clustering. We selected a Dynamic Time Warping (DTW) algorithm which aligns pairs of sequences by varying the time dimension of one sequence (stretching or compressing sections) such that the shapes of the aligned sequences match as well as possible. For example, the initial decrease in fluid volume following treatment might take longer in one eye than another but the overall shapes of the trajectory would match. DTW would align the two sequences and then compute a distance measure based on how far apart the _aligned_ elements of each sequence were. A description of the DTW algorithm is given in Giorgino (2009). An open ended version of DTW was employed such that sequence starts were aligned by default but the ends of sequences were not forced to align if one sequence was much shorter than the other. In this case only the aligned part of the longer sequence would be used to compute the distance. The DTW algorithm is computationally intensive and so was conducted in parallel using the `dtw` and `parallelDist` packages in `R`.
+
+For this analysis it is the longer term treatment responses that are of interest and sequences of $\leq3$ measurements were exlcuded.
+Following this exclusion, `r sum(fluid_eyes$measurements)` fluid measurements of `r nrow(fluid_eyes)` eyes from `r nrow(distinct(fluid_eyes, PatientID))` patients were retained in the analysis.
+
+Sequences were clustered using a k-means algorithm with $k$ determined empirically, testing fits with between 1 and `r length(fluid_kmeans)` clusters. Following inspection of the model performance scree plot (Figure \@ref(fig:kmeans-scree)), $k=4$ was selected, as beyond this point the rate of model improvement with addition of further clusters decreased.
+
+```{r kmeans-scree, fig.cap="Scree plot of K-means model performance by number of clusters. Lower values of within group sum of squares indicate better performance."}
+fluid_kmeans %>% 
+  map_dbl(~.$tot.withinss) %>% 
+  enframe(name = "N clusters", value = "Within group sum of squares") %>% 
+  ggplot(aes(x = `N clusters`, y = `Within group sum of squares`)) +
+  scale_x_continuous(breaks = 1:10, minor_breaks = NULL) +
+  geom_point() +
+  geom_line() +
+  theme_light()
+```
+
+Treatment response varied markedly among clusters (Figure \@ref(fig:fluid-quantiles-cluster)). The largest cluster showed decreasing fluid volumes over the first 4 months of treatment followed by relatively stable low volumes for the remainder of the study period. This cluster represents satisfactory treatment response. Eyes in the second largest cluster started off with greater fluid volumes than those at comparable quantiles in the largest cluster. There was the same pattern of decreasing fluid volumes over the first 4 months but after this IRF volumes returned to baseline values and fluctuated around these for the rest of the study period. SRF volumes decreased gradually in this cluster but remained greater than those in the largest cluster. The two smallest clusters showed substantial and continued variability in fluid volumes, although numbers were too small to discern other patterns. The three smaller clusters represent unsatisfactory treatment responses.
+
+```{r fluid-quantiles-cluster, fig.cap= "Quantiles of fluid volume per month of follow-up by cluster.", fig.width=9, fig.height = 6, warning = FALSE}
+fluid_qtl_cluster %>% 
+  filter(treatment_months <= trunc_month) %>% 
+  mutate(n = fct_reorder(as.factor(n), .x = n, .desc = TRUE)) %>% 
+  ggplot(aes(x = treatment_months, y = volume)) +
+  geom_line(aes(colour = Quantile), size = 1, alpha = 0.5) +
+  facet_wrap(~fluid_type + n, labeller = label_both, nrow = 2) +
+  lims(y = c(0, 600)) +
+  theme_light()
+```
+
+
