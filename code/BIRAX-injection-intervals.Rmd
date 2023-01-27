@@ -1,0 +1,255 @@
+---
+title: "BIRAX study - injection intervals"
+author: "David M Wright - d.wright@qub.ac.uk"
+date: "Document compiled: `r Sys.Date()`"
+output: 
+  bookdown::html_document2:
+     toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(knitr)
+library(kableExtra)
+library(rprojroot)
+library(tidyverse)
+```
+
+`r R.version.string`   
+
+# Introduction
+
+This analysis is of Electronic Medical Records (EMR) from the Belfast Health and Social Care Trust Macular Service. The aim of the study is to investigate the potential for machine learning to identify factors and biomarkers associated with long-term AMD treatment response.
+
+This document describes the temporal distribution of injections in an analysis cohort of patients beginning anti-VEGF treatment for wet AMD. Cohort construction is described in 'BIRAX-cohort-construction.Rmd`.
+
+```{r run-analysis, include=FALSE}
+source(find_rstudio_root_file("Code/BIRAX-assemble-cohort.R"))
+```
+
+# Duration of anti-VEGF treatment
+
+A key clinical question is the duration over which a new patient will be expected to require anti-VEGF treatment.
+
+Anti-VEGF treatment does not continue indefinitely and may be discontinued if a patient has stable vision and no evidence of retinal fluid, or if treatment ceases to be effective, for example if wet AMD converts to geographic atrophy. We setup a multi-state model to describe the proportions of cohort members experiencing each outcome over time. 
+
+Times of the following events were available:
+
+* Last anti-VEGF injection   
+* Last VA measurement   
+* Date of death, if it occurred and was recorded   
+* End of observation period (date of extract or date of death, whichever was earlier)   
+
+All event times were measured in years from the time of treatment start.
+
+The following states were defined:
+
+* `Treatment` - Under anti-VEGF treatment - receiving injections
+* `Ended` - Stopped treatment - no injections for an 18 week period.    
+* `VA ended` - No visual acuity measurements for an 18 week period.  
+* `Died` - Died.   
+
+The `VA ended` state was included because a large proportion of eyes had not received any VA measurements for a long time, even though they had not formally exited the cohort through death. It is likely that these patients had been discharged from the clinic. It is of interest to estimate the proportion of patients still likely to be in contant with the clinic at various times since treatment start.
+
+The following transitions were permitted:
+
+* `Treatment` -> `Ended`
+* `Treatment` -> `Died`    
+* `Ended` -> `VA ended`   
+* `Ended` -> `Died`   
+* `VA ended` -> `Died`   
+
+Death was treated as an absorbing state, and all others were transitive. The multi-state model was setup using `survival::tmerge` and fitted using `survival::survfit` according to the Therneau approach.
+
+The mean time in the `VA ended` state was greatest, indicating that these eyes are likely to have been discharged (Table \@ref(tab:rmeans)). The transitions are summarised in \@ref(tab:transitions) and the proportion of eyes in each state at each time point is given in \@ref(fig:mstate-figure).
+
+
+```{r rmeans}
+summary(msurv)$table %>% 
+  as_tibble(rownames="State") %>% 
+  kbl(caption = "Distribution of restricted mean times in each model state.") %>% 
+  kable_paper()
+```
+
+```{r transitions}
+msurv$transitions %>% 
+  as_tibble() %>% 
+  pivot_wider(names_from = "to", values_from = "n") %>% 
+  kbl(caption = "Distribution of state transitions.") %>% 
+  add_header_above(header = c(" " = 1, "to" = 4)) %>% 
+  kable_paper()
+```
+```{r mstate-figure, fig.cap = "Distribution of states over time.", fig.width=7, fig.height=4}
+# Plot proportion in each state over time
+ mstates %>% 
+  pivot_longer(-yr, names_to = "State", values_to = "Proportion in state") %>% 
+  mutate(State = factor(State, levels = c("Died",  "VA monitoring ended", "Ended treatment", "Under treatment"))) %>% 
+  ggplot(aes(x =yr, y = `Proportion in state`, fill = State)) +
+  geom_area(colour = "white") +
+  theme_light()
+```
+
+```{r mstate-snapshots}
+mstates[snapshots, roll = "nearest",  on = "yr"] %>% 
+  transmute(`Treatment year` = yr+1,
+            `Under treatment`,
+            `Ended treatment`,
+            `VA monitoring ended`,
+            Died) %>% 
+  kbl(caption = "Proportion in each state at start of treatment year (1 = baseline).", digits = 2) %>% 
+  add_header_above(header = c(" " = 1, "to" = 4)) %>% 
+  kable_paper()
+```
+Another key question is the number of injections that might be expected in that time.
+Cumulative number of injections over time.
+
+At 3 years, what proportion of patients have had 5 injections, 6 injections etc?
+
+```{r istate-figure, fig.cap = "Distribution of states over time.", fig.width=7, fig.height=4}
+# Plot proportion in each state over time
+ iarea %>% 
+  ggplot(aes(x =years_treated, y = `Proportion in state`, fill = State)) +
+  geom_area(col = "white") +
+  theme_light()
+```
+
+```{r istate-reducted-figure, fig.cap = "Distribution of states over time.", fig.width=7, fig.height=4}
+# Plot proportion in each state over time
+iarea %>% 
+  group_by(years_treated, n_injection) %>% 
+  summarise(`Proportion in state` = sum(`Proportion in state`), .groups = "drop") %>% 
+  ggplot(aes(x =years_treated, y = `Proportion in state`, fill = n_injection)) +
+  geom_area(col = "white", alpha = 0.5) +
+  theme_light()
+```
+
+```{r istate-snapshots}
+istates[snapshots, roll = "nearest",  on = "yr"] %>% 
+  mutate(`Treatment year` = yr+1) %>% 
+  select(`Treatment year`,
+            matches("^V")) %>% 
+  rename_with(.fn = ~str_remove(., "^V")) %>% 
+  kbl(caption = "Proportion in each state at start of treatment year (1 = baseline).", digits = 2) %>% 
+  add_header_above(header = c(" " = 1, "Injections received" = 81)) %>% 
+  kable_paper()
+```
+
+```{r inj-cumulative-figure, fig.cap= "Cumulative number of injections given over time (all eyes)."}
+injections %>% 
+  arrange(years_treated) %>% 
+  mutate(total = row_number()) %>% 
+  group_by(years_treated) %>% 
+  slice_max(total) %>% 
+  ggplot(aes(x = years_treated, y = total)) +
+  geom_line() +
+  theme_light()# + 
+  # geom_abline(intercept = nrow(eye), slope = nrow(eye)/1 )
+```
+
+Proportion injected by month of follow-up and AMD type.
+Cumulative injections by month?
+
+```{r injections-by-year}
+bind_rows(
+  injections %>% 
+  count(PatientID, EyeCode, treatment_year, name = "Injections") %>% 
+  inner_join(snapshots %>% 
+                   filter(follow_up_year != "0"), by = c("treatment_year" = "follow_up_year")) %>% 
+  mutate(Received = cut(Injections, breaks = c(0,4,7, max(.$Injections)),
+                        labels = c("<5 per year", "5-7 per year", ">=8 per year")),
+    Eyes = " ") %>% 
+  select(treatment_year,  Injections, Received, Eyes) %>% 
+  GenerateDescriptives(col_var = treatment_year),
+
+  injections %>% 
+  transmute(treatment_year, `Total injections` = " ") %>% 
+    inner_join(snapshots %>% 
+                   filter(follow_up_year != "0") %>% select(follow_up_year), by = c("treatment_year" = "follow_up_year")) %>% 
+  GenerateDescriptives(col_var = treatment_year)
+) %>% 
+  kbl(caption = "Distribution of injections received by year of anti-VEGF treatment.") %>% 
+  kable_paper()
+```
+
+```{r injection-intervals-by-year}
+bind_rows(
+    treatment_intervals %>% 
+      group_by(PatientID, EyeCode, treatment_year) %>% 
+      summarise(`Treatment intervals` = n(), 
+                interval_gt80 = any(treatment_interval_days > 80),
+                interval_leq40 = any(treatment_interval_days <= 40), .groups = "drop") %>% 
+      inner_join(snapshots %>% 
+                   filter(follow_up_year != "0"), by = c("treatment_year" = "follow_up_year")) %>% 
+      mutate(`Extended interval (>80 days)` = if_else(interval_gt80, "Yes", "No"),
+             `Short interval (<=40 days)` = if_else(interval_leq40, "Yes", "No"),
+             Eyes = " ") %>% 
+      select(treatment_year, `Treatment intervals`,  `Extended interval (>80 days)`,`Short interval (<=40 days)`, Eyes) %>% 
+      GenerateDescriptives(col_var = treatment_year),
+    
+    treatment_intervals %>% 
+      transmute(treatment_year, `Total treatment intervals` = " ") %>% 
+      inner_join(snapshots %>% 
+                   filter(follow_up_year != "0")%>% 
+                   select(follow_up_year), by = c("treatment_year" = "follow_up_year")) %>% 
+      GenerateDescriptives(col_var = treatment_year)
+  ) %>% 
+    kbl(caption = "Distribution of treatment intervals by year of anti-VEGF treatment. Intervals were assigned to years based on where the start of the treatment interval fell.") %>% 
+    kable_paper()
+```
+
+
+```{r injections-by-year-by-baseline-va}
+bind_rows(
+# Find baseline VA
+  va_history %>% 
+  filter(snapshot, follow_up_year == 0) %>%
+  select(PatientID, EyeCode, va_category_snellen) %>% 
+# Join injections in the years of interest
+    inner_join(injections, by = c("PatientID", "EyeCode")) %>% 
+  inner_join(snapshots %>% 
+                   filter(follow_up_year != "0"), by = c("treatment_year" = "follow_up_year")) %>% 
+  # Count the injections per eye per year
+  count(PatientID, EyeCode, va_category_snellen, treatment_year, name = "Injections") %>% 
+  select(-PatientID, -EyeCode) %>% 
+  group_by(va_category_snellen) %>%
+    nest() %>%
+    mutate(df = map(
+      .x = data,
+      .f = ~ GenerateDescriptives(., col_var = treatment_year)
+    )) %>%
+    select(-data) %>%
+    unnest(cols = c(df)) %>% 
+  arrange(va_category_snellen),
+
+  # Find baseline VA
+va_history %>% 
+  filter(snapshot, follow_up_year == 0) %>%
+  select(PatientID, EyeCode, va_category_snellen) %>% 
+# Join injections in the years of interest
+  inner_join(injections, by = c("PatientID", "EyeCode")) %>% 
+  inner_join(snapshots %>% 
+                   filter(follow_up_year != "0"), by = c("treatment_year" = "follow_up_year")) %>% 
+  # Count the injections per eye per year
+  count(PatientID, EyeCode, va_category_snellen, treatment_year, name = "Injections") %>% 
+mutate(Received = cut(Injections, breaks = c(0,4,7, max(.$Injections)),
+                        labels = c("<5 per year", "5-7 per year", ">=8 per year")),
+       Eyes = " ") %>%   
+  
+  select(-PatientID, -EyeCode, -Injections) %>% 
+  group_by(va_category_snellen) %>%
+    nest() %>%
+    mutate(df = map(
+      .x = data,
+      .f = ~ GenerateDescriptives(., col_var = treatment_year)
+    )) %>%
+    select(-data) %>%
+    unnest(cols = c(df)) %>% 
+  arrange(va_category_snellen)
+
+) %>% 
+  rename(`Baseline VA category` = va_category_snellen) %>%
+  kbl(caption = "Distribution of injections received by year of anti-VEGF treatment and baseline visual acuity.") %>% 
+  kable_paper()
+```
+
+

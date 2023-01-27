@@ -212,7 +212,9 @@ surgery_ind <- fread(file.path(file_path, "BELSurgeryIndications.txt"))
 #   # Save converted version for faster processing
 #   fwrite(file = file.path(file_path, "VisualAcuityLogMAR.csv"))
 
-visual_acuity <- fread(file.path(file_path, "VisualAcuityLogMAR.csv"))
+visual_acuity <- fread(file.path(file_path, "VisualAcuityLogMAR.csv")) %>% 
+  mutate(va_category_snellen = fct_relevel(va_category_snellen, c("Good (VA>6/12)", "Moderate (6/24 < VA <= 6/12)", "Partially sighted (6/60 < VA <= 6/24)", "Blind (VA <= 6/60)")),
+         va_category_etdrs = fct_relevel(va_category_etdrs, c("<33 letters", "33-73 letters", ">73 letters"))) 
 
 
 # Injections

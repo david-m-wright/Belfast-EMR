@@ -19,13 +19,13 @@ library(tidyverse)
 
 # Introduction
 
-This analysis is of Electronic Medical Records (EMR) from the Belfast Health and Social Care Trust Macular Service. The aim of the study is to investigate the potential for machine learning to identify factors and biomarkers associated with long-term AMD treatment response.
-
-This document describes construction of the analysis cohort. Pre-processing of the Medisoft and fluid data are described in `BIRAX-assemble-Medisoft-data-notes.Rmd` and `BIRAX-assemble-NOA-data-notes.Rmd` respectively.
-
 ```{r run-analysis, include=FALSE}
 source(find_rstudio_root_file("Code/BIRAX-assemble-cohort.R"))
 ```
+
+This analysis is of Electronic Medical Records (EMR) from the Belfast Health and Social Care Trust Macular Service extracted over the period `r min(as.Date(encounters$EncounterDate))` to `r max(as.Date(encounters$ExtractDate))`. The aim of the study is to investigate the potential for machine learning to identify factors and biomarkers associated with long-term AMD treatment response.
+
+This document describes construction of the analysis cohort. Pre-processing of the Medisoft and fluid data are described in `BIRAX-assemble-Medisoft-data.html` and `BIRAX-assemble-NOA-data.html` respectively.
 
  
 # Cohort construction
@@ -45,7 +45,7 @@ Injections
 Patient demographics    
 
 * Calculation of patient ages at the index date and at study period end and total observation period for each eye (index age to age at death or study period end, whichever was sooner).    
-* In ~10% of cases the total time under treatment was greater than the calculated observation period by up to half a year. This is likely to have been linked to the date perturbation. Where this occured set the total observation period equal to the total time under treatment.   
+* In ~10% of cases the total time under treatment was greater than the calculated observation period by up to half a year. Where this occurred set the total observation period equal to the total time under treatment.   
 
 Visual acuity
 

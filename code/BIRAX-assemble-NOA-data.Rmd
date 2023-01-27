@@ -32,7 +32,7 @@ source(find_rstudio_root_file("Code/BIRAX-assemble-NOA-data.R"))
 
 # Pre-processing 
 
-The NOA was run on a heterogeneous collection of OCT scans of various sizes and resolutions, including those of patients with DMO and other exudative retinopathies, over 300,000 scans in total. OCT scans were captured on the Heidelberg Spectralis platform and were extracted and anonymised by the EMR provider (Medisoft) before transfer to the research team. Extracted volume scans were provided in two formats, sets of 2D B-scan images (bmp), and videos stitched together from the component B-scans (AVI). The NOA was run on AVI files. Current progress of the NOA in terms of scans processed is summarised in Table \@ref(tab:noa-logs). Unsuccessful scans were those that could not be processed by the NOA and were discarded. Reasons for unsuccessful processing are given in Table \@ref(tab:noa-unsuccessful). Successful scans were labelled by eligibility for inclusion in the analysis. Ineligible scans were those where the NOA outputs are likely to be unreliable. 
+The NOA was run on a heterogeneous collection of OCT scans of various sizes and resolutions, including those of patients with DMO and other exudative retinopathies, over 300,000 scans in total. OCT scans were captured on the Heidelberg Spectralis platform and were extracted and anonymised by the EMR provider (Medisoft) before transfer to the research team. Extracted volume scans were provided in two formats, sets of 2D B-scan images (bmp), and videos stitched together from the component B-scans (AVI). The NOA was run on AVI files. Current progress of the NOA in terms of scans processed is summarised in Table \@ref(tab:noa-logs). Unsuccessful scans were those that could not be processed by the NOA and were discarded. Reasons for unsuccessful processing are given in Table \@ref(tab:noa-unsuccessful). 
 
 ```{r noa-logs}
 noa_log %>% 
@@ -43,6 +43,7 @@ noa_log %>%
 ```
 
 ```{r noa-unsuccessful}
+n_ineligible <- nrow(filter(noa_raw, `Analysis eligibility` == 0))
 noa_unsuccessful %>% 
   mutate(across(Details, str_remove, pattern = "[0-9]{1,3}.[0-9]+")) %>% 
   tabyl(Details) %>% 
@@ -60,7 +61,10 @@ The NOA output data structure is defined in the file `NOA_Dictionary.xls` suppli
 Bullet points describe operations performed on the data. 
 
 * Patient and eye identifiers extracted from `FileName` column.   
+* Excluded `r n_ineligible`, scans ineligible for inclusion in the analysis. Ineligible scans are those that were processed successfully but where the NOA outputs are likely to be unreliable.  
 * Where multiple scans were taken for the same eye on the same day, select a single scan by applying the following criteria, breaking ties with the next criterion on the list:   
    + Scan with the fewest missing values, indicating a more successful NOA analysis.   
    + Scan with the largest number of B-scans (`FrameNum`).   
    + Last scan taken on that day.    
+
+Following these exclusions, a total of `r nrow(noa)` scans were eligible for analysis. 

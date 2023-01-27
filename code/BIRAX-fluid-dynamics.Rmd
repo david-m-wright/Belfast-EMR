@@ -13,13 +13,14 @@ library(knitr)
 library(kableExtra)
 library(rprojroot)
 library(tidyverse)
+library(janitor)
 ```
 
 `r R.version.string`   
 
 
 ```{r run-analysis, include=FALSE}
-source(find_rstudio_root_file("Code/BIRAX-fluid-dynamics.R"))
+source(find_rstudio_root_file("Code/BIRAX-fluid-dynamics-ML.R"))
 ```
 
 # Introduction
@@ -35,8 +36,8 @@ A total of `r nrow(fluid_history)` fluid measurements of `r nrow(eye)` eyes from
 There was a weak positive correlation between IRF and SRF volumes at baseline (r = `r round(cor.test(~IRFVolumeNl + SRFVolumeNl, data = filter(fluid_history, baseline))$estimate, digits = 3)`). Both distributions had a strong positive skew, with the majority of eyes having very little fluid and a minority having very large quantities (Figure \@ref(fig:fluid-types)). Some eyes had no fluid at baseline and around 36% of eyes had only one type of fluid at baseline (Table \@ref(tab:amd-types)).
 
 ```{r fluid-types, fig.cap= "Distribution of Intra-retinal and Sub-retinal fluid volumes at baseline. Axes are on square root scale."}
-fluid_history %>% 
-  filter(baseline) %>% 
+fluid_history %>%
+  filter(baseline) %>%
   ggplot(aes(x = SRFVolumeNl, y = IRFVolumeNl)) +
   geom_point() +
   geom_density_2d() +
@@ -46,13 +47,13 @@ fluid_history %>%
 ```
 
 ```{r amd-types}
-fluid_history %>% filter(baseline) %>% 
- count(SRF, IRF) %>% 
-  adorn_totals() %>% 
-  adorn_percentages("col") %>% 
-  adorn_pct_formatting() %>% 
-  adorn_ns("front") %>% 
-  kbl(caption = "Presence or absence of IRF and SRF at baseline.") %>% 
+fluid_history %>% filter(baseline) %>%
+  count(SRF, IRF) %>%
+  adorn_totals() %>%
+  adorn_percentages("col") %>%
+  adorn_pct_formatting() %>%
+  adorn_ns("front") %>%
+  kbl(caption = "Presence or absence of IRF and SRF at baseline.") %>%
   kable_paper()
 ```
 
@@ -63,10 +64,10 @@ Baseline measurements were taken at or slightly before the date of the first ant
 The number of fluid measurements in the first month of treatment was substantially lower than the number taken at baseline. Measurements increased between the second and fourth months before decreasing steadily with minor fluctuations thereafter (Figure \@ref(fig:fluid-measurement-count)). This pattern is likely to reflect the reduced monitoring of patients during the initial loading phase, followed by gradual attrition of the cohort. To produce stable statistical estimates and trend plots, subsequent analyses consider only the period $\leq$ `r trunc_month` months, after which the number of measurements per month drops below `r trunc_n`. 
 
 ```{r fluid-measurement-count, fig.cap="Number of fluid measurements per month of follow-up. Some eyes were measured multiple times in the same month. Time zero indicates the baseline measurement."}
-fluid_history %>% 
-  count(treatment_months) %>% 
+fluid_history %>%
+  count(treatment_months) %>%
   ggplot(aes(x = treatment_months, y = n)) +
-  geom_line(size = 1) +
+  geom_line(linewidth = 1) +
   theme_light()
 ```
 
@@ -76,11 +77,11 @@ During the first four months of treatment there was a substantial increase in th
 
 
 ```{r amd-type-follow-up, fig.cap="Presence of SRF and IRF by treatment month."}
-fluid_history %>% 
-  filter(treatment_months <= trunc_month) %>% 
-  group_by(treatment_months) %>% 
-  count(amd_type) %>%  
-  mutate(`Proportion of eyes` = n/sum(n)) %>% 
+fluid_history %>%
+  filter(treatment_months <= trunc_month) %>%
+  group_by(treatment_months) %>%
+  count(amd_type) %>%
+  mutate(`Proportion of eyes` = n / sum(n)) %>%
   ggplot(aes(x = treatment_months, y = `Proportion of eyes`)) +
   geom_line(aes(colour = amd_type), size = 1) +
   theme_light()
@@ -91,25 +92,29 @@ fluid_history %>%
 Because a large proportion of eyes have little or no fluid and there are very large outlying measurements (the strong positive skew for IRF and SRF volumes in Figure \@ref(fig:fluid-types)), quantile plots were used in preference to boxplots to illustrate changes in distribution of fluid volumes over time (Figure \@ref(fig:fluid-quantiles)). For both IRF and SRF, values below the 80th percentile were close to zero throughout the study period. For both IRF and SRF there was a sharp initial decrease in fluid volumes followed by a slight increase in the next 3-4 months and then fluctuations around constant levels for the remainder of follow-up.
 
 ```{r fluid-quantiles, fig.cap= "Quantiles of fluid volume per month of follow-up. Quantiles above 90% are much higher and more variable and are excluded for display purposes.", fig.width=9, fig.height = 4}
-fluid_qtl %>% 
-  filter(treatment_months <= trunc_month) %>% 
+fluid_qtl %>%
+  filter(treatment_months <= trunc_month) %>%
   ggplot(aes(x = treatment_months, y = volume)) +
   geom_line(aes(colour = Quantile), size = 1, alpha = 0.5) +
-  facet_wrap(~fluid_type) +
+  facet_wrap( ~ fluid_type) +
   theme_light()
 ```
-Figure \@ref(fig:fluid-types) averagea across changes at the individual eye level and thus hides considerable variation in the fluid volumes within and among eyes. Eyes may show rapid increases in fluid volume such that they may enter the upper quantiles of the fluid volume distribution before dropping down again in response to treatment, being replaced by others in the upper quantiles (Figure \@ref(fig:fluid-history-sample)). Also, eyes vary in both the number and timing of fluid measurements and the number of eyes included in the distribution decreases over time as eyes leave the cohort. 
+Figure \@ref(fig:fluid-types) averages across changes at the individual eye level and thus hides considerable variation in the fluid volumes within and among eyes. Eyes may show rapid increases in fluid volume such that they may enter the upper quantiles of the fluid volume distribution before dropping down again in response to treatment, being replaced by others in the upper quantiles (Figure \@ref(fig:fluid-history-sample)). Also, eyes vary in both the number and timing of fluid measurements and the number of eyes included in the distribution decreases over time as eyes leave the cohort. 
 
 ```{r fluid-history-sample, fig.cap="Changes in fluid volume for a sample of eyes.", warning = FALSE}
-eye %>% 
-  distinct(PatientID, EyeCode) %>% 
-  slice(1:20) %>% 
-  inner_join(fluid_history, by = c("PatientID", "EyeCode")) %>% 
-  mutate(eye_id = paste(PatientID, EyeCode)) %>% 
-  pivot_longer(cols = c(IRFVolumeNl, SRFVolumeNl), names_to = "fluid_type", values_to = "volume") %>% 
+eye %>%
+  distinct(PatientID, EyeCode) %>%
+  slice(1:20) %>%
+  inner_join(fluid_history, by = c("PatientID", "EyeCode")) %>%
+  mutate(eye_id = paste(PatientID, EyeCode)) %>%
+  pivot_longer(
+    cols = c(IRFVolumeNl, SRFVolumeNl),
+    names_to = "fluid_type",
+    values_to = "volume"
+  ) %>%
   ggplot(aes(x = treatment_months, y = volume, group = eye_id)) +
   geom_line(aes(colour = eye_id), size = 1, alpha = 0.5) +
-  facet_wrap(~fluid_type) +
+  facet_wrap( ~ fluid_type) +
   guides(colour = "none") +
   lims(y = c(0, 200)) +
   theme_light()
@@ -129,9 +134,9 @@ Following this exclusion, `r sum(fluid_eyes$measurements)` fluid measurements of
 Sequences were clustered using a k-means algorithm with $k$ determined empirically, testing fits with between 1 and `r length(fluid_kmeans)` clusters. Following inspection of the model performance scree plot (Figure \@ref(fig:kmeans-scree)), $k=4$ was selected, as beyond this point the rate of model improvement with addition of further clusters decreased.
 
 ```{r kmeans-scree, fig.cap="Scree plot of K-means model performance by number of clusters. Lower values of within group sum of squares indicate better performance."}
-fluid_kmeans %>% 
-  map_dbl(~.$tot.withinss) %>% 
-  enframe(name = "N clusters", value = "Within group sum of squares") %>% 
+fluid_kmeans %>%
+  map_dbl( ~ .$tot.withinss) %>%
+  enframe(name = "N clusters", value = "Within group sum of squares") %>%
   ggplot(aes(x = `N clusters`, y = `Within group sum of squares`)) +
   scale_x_continuous(breaks = 1:10, minor_breaks = NULL) +
   geom_point() +
@@ -139,17 +144,228 @@ fluid_kmeans %>%
   theme_light()
 ```
 
-Treatment response varied markedly among clusters (Figure \@ref(fig:fluid-quantiles-cluster)). The largest cluster showed decreasing fluid volumes over the first 4 months of treatment followed by relatively stable low volumes for the remainder of the study period. This cluster represents satisfactory treatment response. Eyes in the second largest cluster started off with greater fluid volumes than those at comparable quantiles in the largest cluster. There was the same pattern of decreasing fluid volumes over the first 4 months but after this IRF volumes returned to baseline values and fluctuated around these for the rest of the study period. SRF volumes decreased gradually in this cluster but remained greater than those in the largest cluster. The two smallest clusters showed substantial and continued variability in fluid volumes, although numbers were too small to discern other patterns. The three smaller clusters represent unsatisfactory treatment responses.
+Treatment response varied markedly among clusters (Figure \@ref(fig:fluid-quantiles-cluster)). The largest cluster (1) showed decreasing fluid volumes over the first 4 months of treatment followed by relatively stable low volumes for the remainder of the study period. This cluster represents satisfactory treatment response. Eyes in the second largest cluster (3) started off with average fluid volumes greater than those in the cluster 1. There was the same pattern of decreasing fluid volumes over the first 4 months but after this IRF volumes returned to baseline values and fluctuated around these for the rest of the study period. SRF volumes decreased gradually in this cluster but remained greater than those in the largest cluster. The two smallest clusters (2 and 4) showed substantial and continued variability in fluid volumes, although numbers were too small to discern other patterns. The three smaller clusters represent unsatisfactory treatment responses.
 
 ```{r fluid-quantiles-cluster, fig.cap= "Quantiles of fluid volume per month of follow-up by cluster.", fig.width=9, fig.height = 6, warning = FALSE}
-fluid_qtl_cluster %>% 
-  filter(treatment_months <= trunc_month) %>% 
-  mutate(n = fct_reorder(as.factor(n), .x = n, .desc = TRUE)) %>% 
+fluid_qtl_cluster %>%
+  filter(treatment_months <= trunc_month) %>%
+  mutate(n = fct_reorder(as.factor(n), .x = n, .desc = TRUE)) %>%
   ggplot(aes(x = treatment_months, y = volume)) +
   geom_line(aes(colour = Quantile), size = 1, alpha = 0.5) +
-  facet_wrap(~fluid_type + n, labeller = label_both, nrow = 2) +
+  facet_wrap( ~ fluid_type + cluster + n, labeller = label_both, nrow = 2) +
   lims(y = c(0, 600)) +
   theme_light()
+# summary(lm(IRFVolumeNl ~ cluster, data = filter(fluid_history_cluster, baseline)))
+# summary(lm(SRFVolumeNl ~ cluster, data = filter(fluid_history_cluster, baseline)))
 ```
+
+
+
+# Characteristics of treatment response clusters
+
+Eyes in clusters 2-3 had slightly lower average age at baseline than those in cluster 1 (Table \@ref(tab:descriptives-cluster)) and there was a greater proportion of males in cluster 3 than cluster 1. Eyes with unsatisfactory treatment response (clusters 2-4) were treated and observed for longer than those with a satisfactory response (cluster 1, Table \@ref(tab:follow-up-length-clusters). Those in clusters 2-4 also received almost twice as many injections on average than those in cluster 1 and a greater number of VA exams, OCT thickness measurements and retinal fluid measurements, indicating a much more active treatment regime than those in cluster 1. This is consistent with treatment decisions being primarily based on presence of fluid. Clusters varied in mean fluid volumes at baseline, but there was considerable overlap in the distributions (Figure \@ref(fig:fluid-baseline-cluster)). There was no evidence that clusters varied in mean visual acuity (logMAR) at baseline (Table \@ref(tab:va-baseline-cluster)).
+
+```{r descriptives-cluster}
+eye_cluster %>%
+  transmute(cluster, Age = index_age, Gender, Eyes = " ") %>%
+  GenerateDescriptives(col_var = cluster, type = c(Age = "Mean (Range)")) %>%
+  kbl(caption = "Baseline characteristics of eyes with AMD by cluster.") %>%
+  kable_paper()
+
+# summary(lm(index_age ~ cluster, data = eye_cluster))
+# summary(glm(Gender ~ cluster, data = eye_cluster, family = "binomial"))
+```
+
+```{r follow-up-length-clusters}
+bind_rows(
+  eye_cluster %>%
+    transmute(
+      cluster,
+      Eyes = " ",
+      `Years observed` = years_observed,
+      `Total injections` = total_injections,
+      Injections = total_injections,
+      `Years treated` = years_treated
+    ) %>%
+    GenerateDescriptives(
+      col_var = cluster,
+      type = c(
+        `Years observed` = "Median (Range)",
+        Injections = "Median (Range)",
+        `Years treated` = "Median (Range)",
+        `Total injections` = " "
+      )
+    ),
+  
+  GenerateDescriptives(
+    transmute(va_history_cluster,
+              cluster, `Total VA exams` = " "),
+    col_var = cluster
+  ),
+  
+  va_history %>%
+    inner_join(eye_cluster, by = c("PatientID", "EyeCode")) %>%
+    group_by(PatientID, EyeCode, cluster) %>%
+    summarise(
+      `VA exams` = n(),
+      `VA years observed` = max(months_since_index / 12),
+      .groups = "drop"
+    ) %>%
+    select(-PatientID,-EyeCode) %>%
+    GenerateDescriptives(
+      col_var = cluster,
+      type = c(`VA exams` = "Median (Range)",
+               `VA years observed` = "Median (Range)")
+    ),
+  
+  GenerateDescriptives(
+    transmute(
+      thickness_history %>% inner_join(eye_cluster, by = c("PatientID", "EyeCode")),
+      cluster,
+      `Total OCT thickness measurements` = " "
+    ),
+    col_var = cluster
+  ),
+  
+  thickness_history_cluster %>%
+    group_by(PatientID, EyeCode, cluster) %>%
+    summarise(
+      `OCT thickness measurements` = n(),
+      `OCT thickness years observed` = max(months_since_index / 12),
+      .groups = "drop"
+    ) %>%
+    select(-PatientID,-EyeCode) %>%
+    GenerateDescriptives(
+      col_var = cluster,
+      type = c(
+        `OCT thickness measurements` = "Median (Range)",
+        `OCT thickness years observed` = "Median (Range)"
+      )
+    ),
+  
+  GenerateDescriptives(
+    transmute(fluid_history_cluster, cluster, `Total OCT fluid measurements` = " "),
+    col_var = cluster
+  ),
+  
+  fluid_history_cluster %>%
+    group_by(PatientID, EyeCode, cluster) %>%
+    summarise(
+      `OCT fluid measurements` = n(),
+      `OCT fluid years observed` = max(months_since_index / 12),
+      .groups = "drop"
+    ) %>%
+    select(-PatientID,-EyeCode) %>%
+    GenerateDescriptives(
+      col_var = cluster,
+      type = c(
+        `OCT fluid measurements` = "Median (Range)",
+        `OCT fluid years observed` = "Median (Range)"
+      )
+    )
+) %>%
+  kbl(caption = "Number of examinations and length of follow-up by cluster.") %>%
+  add_header_above(header = c(" " = 2, "Cluster" = 4)) %>%
+  kable_paper()
+
+# summary(lm(years_observed ~ cluster, data = eye_cluster))
+# summary(lm(years_treated ~ cluster, data = eye_cluster))
+# summary(lm(total_injections ~ cluster, data = eye_cluster))
+```
+
+
+```{r fluid-baseline-cluster, fig.cap="Distribution of fluid at baseline by cluster".}
+fluid_history_cluster %>% 
+  filter(baseline) %>% 
+  pivot_longer(
+    cols = c(IRFVolumeNl, SRFVolumeNl),
+    names_to = "fluid_type",
+    values_to = "volume"
+  ) %>%
+  ggplot(aes(x = volume)) +
+  geom_histogram(aes(fill = cluster), bins = 50) +
+  facet_wrap(~fluid_type) + 
+  scale_y_sqrt() +
+  theme_light()
+
+# summary(lm(IRFVolumeNl ~ cluster, data = filter(fluid_history_cluster, baseline)))
+# summary(lm(SRFVolumeNl ~ cluster, data = filter(fluid_history_cluster, baseline)))
+```
+
+
+
+```{r va-baseline-cluster}
+va_history_cluster %>%
+  filter(baseline) %>%
+  transmute(cluster, va_logmar, va_etdrs, va_category_snellen, Eyes = "n") %>%
+  GenerateDescriptives(
+    col_var = cluster,
+    type = c(va_logmar = "Mean (Range)", va_etdrs = "Median (IQR)")
+  ) %>%
+  left_join(var_desc, by = "Variable") %>%
+  mutate(Description = coalesce(Description, Variable)) %>%
+  select(Description, everything(),-Variable) %>%
+  kbl(caption = "Distribution of visual acuity outcomes at baseline by cluster.") %>%
+  kable_paper()
+
+# summary(lm(va_logmar ~ cluster, data = filter(va_history_cluster, baseline)))
+# summary(glm(va_category_snellen ~ cluster, data = filter(va_history_cluster, baseline), family = "binomial"))
+```
+
+
+
+
+Despite having similar distributions of visual acuity at baseline, there were clear differences among clusters in VA outcomes over time. In cluster 1, eyes in the upper half of the distribution (i.e. those with worse vision) showed further worsening of vision during follow up, with increasing proportions partially sighted or blind (Figure, \@ref(fig:va-quantiles)). In cluster 3, the baseline distribution was similar but the proportions partially sighted or blind increased at a faster rate. Cluster 2 showed still more rapid worsening, as did cluster 4, although this cluster was too small to make stable estimates.
+
+```{r va-quantiles, fig.cap= "Quantiles of visual acuity measurements (logMAR) per month of follow-up. Dashed lines indicate boundaries between vision categories (bottom-top:good, moderate, partially sighted, blind).", fig.width=9, fig.height = 4}
+va_qtl_cluster %>%
+  filter(treatment_months <= trunc_month) %>%
+  ggplot(aes(x = treatment_months, y = va_logmar)) +
+  geom_line(aes(colour = Quantile), size = 1, alpha = 0.5) +
+  geom_hline(yintercept = c(0.3, 0.6, 1), linetype = 2) +
+  facet_wrap( ~ cluster + n, nrow = 1, labeller = label_both) +
+  theme_light()
+
+# summary(lm(va_logmar ~ treatment_months*cluster, data = va_history_cluster))
+```
+
+
+# Predicting treatment outcomes
+
+## Cluster membership
+
+The next task was to determine whether cluster membership can be predicted based on baseline characteristics. 
+
+There were no clear differences among clusters in demographic factors or baseline VA. Although there were differences in mean IRF and SRF volumes at baseline between clusters 1 and 3, the distributions overlapped so completely that these variables used singly are unlikely to have predictive power.
+
+The prediction problem is a multi-class classification.
+
+
+Impute missing values.
+Normalise variables.
+Conventional multinomial regression.
+SuperLearner
+
+
+
+### Missingness
+
+
+
+## Number of injections required per treatment year
+
+
+
+## VA at year ends
+
+
+
+
+
+
+
+
+
+
 
 

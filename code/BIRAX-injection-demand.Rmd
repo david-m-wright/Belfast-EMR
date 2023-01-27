@@ -1,0 +1,261 @@
+---
+title: "BIRAX study - injection demand"
+author: "David M Wright - d.wright@qub.ac.uk"
+date: "Document compiled: `r Sys.Date()`"
+output: 
+  bookdown::html_document2:
+  toc: true
+---
+  
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(knitr)
+library(kableExtra)
+library(rprojroot)
+library(tidyverse)
+library(janitor)
+```
+
+`r R.version.string`   
+
+
+```{r run-analysis, include=FALSE}
+source(find_rstudio_root_file("Code/BIRAX-injection-demand.R"))
+```
+
+# Introduction
+
+This analysis is of Electronic Medical Records (EMR) from the Belfast Health and Social Care Trust Macular Service. The aim of the study is to investigate the potential for machine learning to identify factors and biomarkers associated with long-term AMD treatment response.
+
+This analysis investigates the extent to which the number of anti-VEGF injections received by each eye can be predicted based on measurements of retinal fluid produced by the Notal Ophthalmic Analyzer (NOA). The outcome of interest is the number of injections received by an eye in the first three years of treatment. The input variables were the retinal fluid measurements at baseline and at six months.
+
+Cohort construction is described in 'BIRAX-cohort-construction.html` (`r nrow(eye_demand_raw)` eyes from `r nrow(distinct(eye_demand_raw, PatientID))` patients).
+
+* Excluded `r nrow(filter(eye_demand_raw, exclude_three_yrs_observed))` eyes observed for $<3$ years.   
+* Excluded `r nrow(filter(eye_demand_raw, !exclude_three_yrs_observed, exclude_fluid_eyes))` eyes with $\leq 3$ fluid measurements in total.    
+* Excluded `r nrow(filter(eye_demand_raw, exclude_three_yrs_observed, !exclude_fluid_eyes, exclude_6months_fluid))` eyes without a fluid measurement at 6 months (+-2 months, Figure \@ref(fig:close-to-snapshot)).    
+
+A total of `r nrow(eye_demand)` eyes from `r nrow(distinct(eye_demand, PatientID))` patients remained after these exclusions.
+
+```{r close-to-snapshot, fig.cap="Distribution of actual times since baseline for the 'Six month' fluid measurement."}
+fluid_6months_imp_demand %>%
+  select(PatientID, EyeCode) %>%
+  inner_join(
+    fluid_history_imp %>%
+      filter(snapshot, follow_up_month == 6)
+    ,
+    by = c("PatientID", "EyeCode")
+  ) %>%
+  ggplot(aes(x = months_since_index)) +
+  geom_histogram(bins = 25) +
+  theme_light() +
+  labs(x = "Months since baseline",
+       y = "Count")
+```
+
+## Patient characteristics
+
+```{r descriptives}
+eye_demand %>%
+   transmute(Age = index_age, Gender, Eyes = " ") %>%
+  GenerateDescriptives(type = c(Age = "Mean (Range)")) %>%
+  kbl(caption = "Baseline characteristics of eyes with AMD. Frequency and percentage reported for categorical variables.") %>%
+  kable_paper()
+```
+
+```{r follow-up-length}
+bind_rows(
+  eye_demand %>%
+    inner_join(three_years_n_injections, by = c("PatientID", "EyeCode")) %>%
+    transmute(Injections = three_yr_injections,
+              `Total injections` = three_yr_injections) %>%
+    GenerateDescriptives(type = c(
+      Injections = "Median (IQR)",
+      `Total injections` = " "
+    )),
+  
+  GenerateDescriptives(transmute(va_history_demand, `Total VA exams` = " ")),
+  
+  va_history_demand %>%
+    group_by(PatientID, EyeCode) %>%
+    summarise(
+      `VA exams` = n(),
+      `VA years observed` = max(months_since_index / 12),
+      .groups = "drop"
+    ) %>%
+    select(-PatientID,-EyeCode) %>%
+    GenerateDescriptives(
+      type = c(`VA exams` = "Median (Range)",
+               `VA years observed` = "Median (Range)")
+    ),
+  
+  GenerateDescriptives(
+    transmute(thickness_history_demand, `Total OCT thickness measurements` = " ")
+  ),
+  
+  thickness_history_demand %>%
+    group_by(PatientID, EyeCode) %>%
+    summarise(
+      `OCT thickness measurements` = n(),
+      `OCT thickness years observed` = max(months_since_index / 12),
+      .groups = "drop"
+    ) %>%
+    select(-PatientID,-EyeCode) %>%
+    GenerateDescriptives(
+      type = c(
+        `OCT thickness measurements` = "Median (Range)",
+        `OCT thickness years observed` = "Median (Range)"
+      )
+    ),
+  
+  GenerateDescriptives(
+    transmute(fluid_history_demand, `Total OCT fluid measurements` = " ")
+  ),
+  
+  fluid_history_demand %>%
+    group_by(PatientID, EyeCode) %>%
+    summarise(
+      `OCT fluid measurements` = n(),
+      `OCT fluid years observed` = max(months_since_index / 12),
+      .groups = "drop"
+    ) %>%
+    select(-PatientID,-EyeCode) %>%
+    GenerateDescriptives(
+      type = c(
+        `OCT fluid measurements` = "Median (Range)",
+        `OCT fluid years observed` = "Median (Range)"
+      )
+    )
+) %>%
+  kbl(caption = "Number of injections and examinations and length of follow-up.") %>%
+  kable_paper()
+```
+
+## Visual acuity
+
+```{r va-baseline}
+va_history_demand %>% 
+  filter(baseline) %>% 
+  transmute(va_logmar, va_etdrs, va_category_snellen, Eyes = "n") %>% 
+  GenerateDescriptives(type = c(va_logmar = "Mean (Range)", va_etdrs = "Median (IQR)")) %>% 
+  left_join(var_desc, by = "Variable") %>%
+  mutate(Description = coalesce(Description, Variable)) %>%
+  select(Description, everything(), -Variable) %>%
+  kbl(caption = "Distribution of visual acuity outcomes at baseline.") %>% 
+  kable_paper()
+```
+
+```{r va-baseline-amd-type}
+fluid_history_demand %>% 
+  filter(baseline) %>% 
+  select(PatientID, EyeCode, amd_type) %>% 
+  inner_join(
+va_history_demand %>% 
+  filter(baseline),
+by = c("PatientID", "EyeCode")) %>% 
+  transmute(amd_type, va_logmar, va_etdrs, va_category_snellen, Eyes = "n") %>% 
+  GenerateDescriptives(col_var = amd_type, type = c(va_logmar = "Mean (Range)", va_etdrs = "Median (IQR)")) %>% 
+  left_join(var_desc, by = "Variable") %>%
+  mutate(Description = coalesce(Description, Variable)) %>%
+  select(Description, everything(), -Variable) %>%
+  kbl(caption = "Distribution of visual acuity outcomes at baseline by fluid presence.") %>% 
+  kable_paper()
+```
+
+
+# Prediction task
+
+## Model structure
+
+An ensemble machine learning pipeline was used to find the best prediction for each eye, using a diverse set of learners to capture interactions and non-linear relationships among variables in the absence of a-priori information on the correct functional form. The selected learners are listed in Table \@ref(tab:learners). The SuperLearner algorithm was used to fit the learners and combine predictions in a `r length(demand_task_6$folds)` fold cross-validated manner.
+
+```{r learners}
+sl_learners %>% 
+  enframe(name = "NULL", value = "learner") %>% 
+  kbl(caption= "Learners included in ensemble (SuperLearner) fit.") %>% 
+  kable_paper()
+```
+
+The fluid measurements are listed in Table \@ref(tab:noa-selected) and prior to model fitting, missing measurements were imputed with zero.
+
+```{r noa-selected}
+enframe(noa_volumes_selected, value = "Variable", name = NULL) %>% 
+  kbl(caption = "Retinal fluid measurements included in models predicting injection demand.") %>% 
+  kable_paper()
+```
+
+## Model fit
+
+The relative contribution of each learner to the final prediction and the cross validated risk associated with each is given in Table \@ref(tab:cv-risk).
+
+```{r cv-risk}
+sl_fit_6_cv_risk %>% 
+  kbl(caption = "Cross-validated risk for fitted learners.", digits = 2) %>% 
+  kable_paper()
+```
+
+
+# Prediction results
+
+Discrimination of the model was good. The correlation between the predicted and observed number of injections was high (r = `r round(cor_sl_preds_6$estimate, 3)`, P = `r format.pval(cor_sl_preds_6$p.value, 3, eps = 0.001)`, Table \@ref(tab:confusion)). 
+
+Overall performance was reasonable with mean absolute deviation was `r round(mean(sl_preds_6$abs_deviation),2)`. The deviation between model predictions and observed values is shown in tables \@ref(tab:deviations) and \@ref(tab:abs-deviations).
+
+The total number of predicted injections was `r sum(sl_preds_6$pred_three_yr_injections)` and the observed number of injections was `r sum(sl_preds_6$three_yr_injections)`.
+
+```{r confusion}
+xtabs(data = sl_preds_6, ~three_yr_injections + pred_three_yr_injections) 
+```
+
+```{r deviations}
+sl_preds_6 %>% 
+  tabyl(deviation) %>% 
+  adorn_pct_formatting() %>% 
+  kbl(caption = "Deviation between number of injections predicted and number of injections received.") %>% 
+  kable_paper()
+```
+
+```{r abs-deviations}
+sl_preds_6 %>% 
+  tabyl(abs_deviation) %>% 
+  mutate(cumulative_n = cumsum(n), 
+         cumulative = cumulative_n/sum(n)) %>% 
+   adorn_pct_formatting(... = c(percent, cumulative)) %>% 
+    kbl(caption = "Absolute deviation between number of injections predicted and number of injections received.") %>% 
+  kable_paper()
+```
+
+In general, calibration of the model was best for those with 12 injections. Eyes where <12 injections were predicted tended to receive fewer than predicted. In contrast, eyes where >12 injections were predicted tended to receive more. The overall pattern is towards over-prediction at the lower end of the response curve and under-prediction at the upper end (calibration intercept = `r round(cal_6$coefficients[1], 2)`, slope = `r round(cal_6$coefficients[2], 2)`.
+
+```{r calibration-6, fig.cap="Predicted number of injections vs. number of injections received. Solid lines indicates calibration slopes (blue = fitted, black = perfect)."}
+sl_preds_6 %>% 
+  ggplot(aes(y = three_yr_injections, x = pred_three_yr_injections)) +
+  # geom_jitter(width = 0.3, aes(colour = Age)) +
+  geom_jitter(width = 0.3) +
+  geom_abline(aes(intercept = 0, slope =1)) +
+  # Calibration slope
+   # geom_smooth(method = lm) +
+  # Manually fitted
+  geom_abline(intercept = cal_6$coefficients[1], slope = cal_6$coefficients[2], colour = "blue")+
+  theme_light() +
+  labs(x = "Injections at three years (predicted)",
+       y = "Injections at three years (received)")
+```
+
+# Interpretable machine learning
+
+```{r shap-importance, fig.cap="Global importance of variables in model of injection demand.", fig.height=11, fig.width=6}
+autoplot(sl_shap_all) +
+  theme_light()
+```
+```{r shap-dep, fig.cap="Dependence of SHAP values on SRF volume at 6 months."}
+autoplot(sl_shap_all, type = "dependence", feature = "SRFVolumeNl_6", X = demand_task_6$data, alpha=0.3) +
+  theme_light()
+```
+```{r shap-contrib, fig.cap="Contribution of variables to predictions.", fig.height=11, fig.width=6}
+autoplot(sl_shap_all, type = "contribution", feature = "SRFVolumeNl_6", X = demand_task_6$data[1,], alpha=0.3) +
+  theme_light()
+```
+```{r force-plot}
+# force_plot(object = sl_shap_all[1L, ], feature_values = demand_task_6$data[1,], display = "html")  
+```

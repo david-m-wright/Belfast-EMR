@@ -107,7 +107,7 @@ noa_raw %>%
 # Highest number of frames in the AVI (B-scans)
 # If tied, the final scan taken on that date is selected.
 noa <- noa_raw %>% 
-  # filter(`Analysis eligibility` == 1) %>% 
+  filter(`Analysis eligibility` == 1) %>% 
   mutate(OCTMissing = rowSums(across(!matches("Bscan"), is.na))) %>% 
   group_by(PatientID, EyeCode, OCTDate) %>% 
   slice_max(`Analysis eligibility`, n = 1, with_ties = TRUE) %>% 

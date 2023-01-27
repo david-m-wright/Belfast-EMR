@@ -168,39 +168,418 @@ pre code {
 
 <h1 class="title toc-ignore">DMO in BHSCT Macular Service - Analysis Notes</h1>
 <h4 class="author">David M Wright - <a href="mailto:d.wright@qub.ac.uk" class="email">d.wright@qub.ac.uk</a></h4>
-<h4 class="date">Document compiled: 2021-04-20</h4>
+<h4 class="date">Document compiled: 2021-09-06</h4>
 
 </div>
 
 <div id="TOC">
 <ul>
-<li><a href="#cohort-construction"><span class="toc-section-number">1</span> Cohort construction</a></li>
+<li><a href="#introduction"><span class="toc-section-number">1</span> Introduction</a></li>
+<li><a href="#cohort-construction"><span class="toc-section-number">2</span> Cohort construction</a>
+<ul>
+<li><a href="#pre-processing"><span class="toc-section-number">2.1</span> Pre-processing</a>
+<ul>
+<li><a href="#dmovisualacuity-table"><span class="toc-section-number">2.1.1</span> DMOVisualAcuity table</a></li>
+<li><a href="#dmoinjections-table"><span class="toc-section-number">2.1.2</span> DMOInjections table</a></li>
+<li><a href="#derived-tables"><span class="toc-section-number">2.1.3</span> Derived tables</a></li>
+</ul></li>
+<li><a href="#inclusion-and-exclusion-criteria"><span class="toc-section-number">2.2</span> Inclusion and exclusion criteria</a></li>
+</ul></li>
+<li><a href="#descriptive-statistics"><span class="toc-section-number">3</span> Descriptive statistics</a></li>
+<li><a href="#treatment-sequences"><span class="toc-section-number">4</span> Treatment sequences</a></li>
 </ul>
 </div>
 
 <p>R version 4.0.3 (2020-10-10)</p>
-<p>This analysis is of Electronic Medical Records (EMR) from the Belfast Health and Social Care Trust Macular Service.</p>
-<div id="cohort-construction" class="section level1" number="1">
-<h1><span class="header-section-number">1</span> Cohort construction</h1>
-<p>Data were extracted by Medisoft with the following inclusion and exclusion criteria.</p>
-<p>Inclusion: “Any patient having attended the BHSCT macular treatment service at least once during the period May 2008 to date of extraction with a diagnosis DR/DMO.”
-Exclusion: “Any patient marked as a test patient.”</p>
-<p>The data structure is defined in the file <code>Novartis DMO Study - Data Dictionary v1.1.xls</code> and a total of 18 separate pipe delimited files were provided.</p>
-<p>Data were extracted on 2021-03-31.</p>
-<p>EMR for a total of 4330 patients were included in the extracted dataset.</p>
-<ul>
-<li>2829 patients were excluded because they did not receive any anti-VEGF injections.<br />
-</li>
-<li>0 patients were &lt;18 at the index date.</li>
-<li>1126 patients with no DMO diagnosis recorded in the 180 days previous to the index date. Diagnosis was defined using the ICD10 code (<code>DiagnosisICD10Code == &quot;H36.0 + E14.3&quot;</code>).<br />
-</li>
-<li>44 patients where neither eye received any injections after the index date.</li>
-</ul>
-<p>A total of 331 patients remained after these exclusions.
-For these patients there was a total of 484 eyes observed for a total of 3600 treatment intervals (between injections).</p>
+<div id="introduction" class="section level1" number="1">
+<h1><span class="header-section-number">1</span> Introduction</h1>
+<p>This analysis is of Electronic Medical Records (EMR) from the Belfast Health and Social Care Trust Macular Service. The aims are to describe the pattern of anti-VEGF injection intervals among patients receiving treatment for Diabetic Macular Oedema (DMO). Of particular interest are those patients that were able to have injection intervals consistently extended over 12 weeks duration.</p>
+</div>
+<div id="cohort-construction" class="section level1" number="2">
+<h1><span class="header-section-number">2</span> Cohort construction</h1>
+<div id="pre-processing" class="section level2" number="2.1">
+<h2><span class="header-section-number">2.1</span> Pre-processing</h2>
+<p>The data structure is defined in the file <code>Novartis DMO Study - Data Dictionary v1.1.xls</code> and a total of 18 separate pipe delimited files were provided (Table <a href="#tab:table-descriptions">2.1</a>). Data were extracted on 2021-03-31.</p>
 <table class=" lightable-paper" style="font-family: &quot;Arial Narrow&quot;, arial, helvetica, sans-serif; margin-left: auto; margin-right: auto;">
 <caption>
-<span id="tab:descriptives">Table 1.1: </span>Baseline demographics and characteristics of patients with DMO. Mean and SD reported for continuous variables, frequency and percentage reported for categorical variables.
+<span id="tab:table-descriptions">Table 2.1: </span>Description of input data files.
+</caption>
+<thead>
+<tr>
+<th style="text-align:right;">
+Table number
+</th>
+<th style="text-align:left;">
+Table name
+</th>
+<th style="text-align:right;">
+Rows
+</th>
+<th style="text-align:right;">
+Columns
+</th>
+<th style="text-align:left;">
+Description
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:left;">
+DMOClinicalFindings
+</td>
+<td style="text-align:right;">
+90975
+</td>
+<td style="text-align:right;">
+12
+</td>
+<td style="text-align:left;">
+A table of all clinical findings at any time for any patient within the cohort
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+2
+</td>
+<td style="text-align:left;">
+DMOCoPathology
+</td>
+<td style="text-align:right;">
+25949
+</td>
+<td style="text-align:right;">
+8
+</td>
+<td style="text-align:left;">
+A table of co-pathologies recorded at any time for any patient within the cohort
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+3
+</td>
+<td style="text-align:left;">
+DMODiabeticDiagnosis
+</td>
+<td style="text-align:right;">
+6022
+</td>
+<td style="text-align:right;">
+10
+</td>
+<td style="text-align:left;">
+A list of diabetic status data for any patient within the cohort
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+4
+</td>
+<td style="text-align:left;">
+DMODiagnoses
+</td>
+<td style="text-align:right;">
+45279
+</td>
+<td style="text-align:right;">
+13
+</td>
+<td style="text-align:left;">
+A table of all diagnoses recorded in the system at any time for any patient within the cohort
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+5
+</td>
+<td style="text-align:left;">
+DMODRAssessment
+</td>
+<td style="text-align:right;">
+19068
+</td>
+<td style="text-align:right;">
+16
+</td>
+<td style="text-align:left;">
+A list of DR Assessment outcomes for any patient within the cohort
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+6
+</td>
+<td style="text-align:left;">
+DMODRGrading
+</td>
+<td style="text-align:right;">
+65285
+</td>
+<td style="text-align:right;">
+11
+</td>
+<td style="text-align:left;">
+A list of the DR Grading outcomes for any patient within the cohort
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+7
+</td>
+<td style="text-align:left;">
+DMOEncounters
+</td>
+<td style="text-align:right;">
+92312
+</td>
+<td style="text-align:right;">
+16
+</td>
+<td style="text-align:left;">
+A table of all related clinical encounters for any patient within the cohort
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+8
+</td>
+<td style="text-align:left;">
+DMOInjections
+</td>
+<td style="text-align:right;">
+20305
+</td>
+<td style="text-align:right;">
+15
+</td>
+<td style="text-align:left;">
+A table of ocular injections at any time for any patient within the cohort
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+9
+</td>
+<td style="text-align:left;">
+DMOInvestigations
+</td>
+<td style="text-align:right;">
+1671
+</td>
+<td style="text-align:right;">
+8
+</td>
+<td style="text-align:left;">
+A table of requested investigations at any time for any patient within the cohort
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+10
+</td>
+<td style="text-align:left;">
+DMOIOP
+</td>
+<td style="text-align:right;">
+87514
+</td>
+<td style="text-align:right;">
+9
+</td>
+<td style="text-align:left;">
+A table of intraocular pressure (IOP) measurements recorded at any time for any patient within the cohort
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+11
+</td>
+<td style="text-align:left;">
+DMOMedicalHistory
+</td>
+<td style="text-align:right;">
+793979
+</td>
+<td style="text-align:right;">
+8
+</td>
+<td style="text-align:left;">
+A list of recorded medical history at any time for any patient within the cohort
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+12
+</td>
+<td style="text-align:left;">
+DMOMedication
+</td>
+<td style="text-align:right;">
+27644
+</td>
+<td style="text-align:right;">
+19
+</td>
+<td style="text-align:left;">
+A table of medications recorded or prescribed at any time for any patient within the cohort
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+13
+</td>
+<td style="text-align:left;">
+DMOOperativeComplications
+</td>
+<td style="text-align:right;">
+27728
+</td>
+<td style="text-align:right;">
+9
+</td>
+<td style="text-align:left;">
+A table of perioperative complications for any patient within the cohort
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+14
+</td>
+<td style="text-align:left;">
+DMOPatientDetails
+</td>
+<td style="text-align:right;">
+4330
+</td>
+<td style="text-align:right;">
+9
+</td>
+<td style="text-align:left;">
+A table of patients included within the cohort
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+15
+</td>
+<td style="text-align:left;">
+DMOPostOperativeComplications
+</td>
+<td style="text-align:right;">
+225715
+</td>
+<td style="text-align:right;">
+9
+</td>
+<td style="text-align:left;">
+A table of post-operative ocular complications for any patient within the cohort
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+16
+</td>
+<td style="text-align:left;">
+DMOSurgery
+</td>
+<td style="text-align:right;">
+27808
+</td>
+<td style="text-align:right;">
+15
+</td>
+<td style="text-align:left;">
+A list of ocular procedures for any patient within the cohort
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+17
+</td>
+<td style="text-align:left;">
+DMOSurgeryIndications
+</td>
+<td style="text-align:right;">
+27782
+</td>
+<td style="text-align:right;">
+9
+</td>
+<td style="text-align:left;">
+A list of indications for surgery (primary diagnosis) for any patient within the cohort
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+18
+</td>
+<td style="text-align:left;">
+DMOVisualAcuity
+</td>
+<td style="text-align:right;">
+156983
+</td>
+<td style="text-align:right;">
+18
+</td>
+<td style="text-align:left;">
+A list of all visual acuity (VA) measurements recorded at any time for any patient within the cohort
+</td>
+</tr>
+</tbody>
+</table>
+<p>The following steps were taken to pre-process the data:</p>
+<div id="dmovisualacuity-table" class="section level3" number="2.1.1">
+<h3><span class="header-section-number">2.1.1</span> DMOVisualAcuity table</h3>
+<ul>
+<li>Conversion of visual acuity measurements to both ETDRS and logMAR formats.</li>
+</ul>
+</div>
+<div id="dmoinjections-table" class="section level3" number="2.1.2">
+<h3><span class="header-section-number">2.1.2</span> DMOInjections table</h3>
+<ul>
+<li>Removed 155 injections that were not for anti-VEGF agents.</li>
+<li>Removed 9 duplicate injection entries.<br />
+</li>
+<li>Added visual acuity measurements to the corresponding injection record.</li>
+</ul>
+<p>A total of 20141 injection records remained.</p>
+</div>
+<div id="derived-tables" class="section level3" number="2.1.3">
+<h3><span class="header-section-number">2.1.3</span> Derived tables</h3>
+<ul>
+<li>Identified first injection recorded for each eye and the date (the index date).<br />
+</li>
+<li>Calculated patient ages at the index date and at study period end and total observation period for each eye.<br />
+</li>
+<li>Creation of new table (<code>eye</code>) containing patient details, follow up period and baseline VA.<br />
+</li>
+<li>Calculated treatment intervals (<code>treatment_intervals</code> table).</li>
+</ul>
+</div>
+</div>
+<div id="inclusion-and-exclusion-criteria" class="section level2" number="2.2">
+<h2><span class="header-section-number">2.2</span> Inclusion and exclusion criteria</h2>
+<p>Data were extracted by Medisoft with the following inclusion and exclusion criteria.</p>
+<p>Inclusion: “Any patient having attended the BHSCT macular treatment service at least once during the period May 2008 to date of extraction with a diagnosis DR/DMO.”<br />
+Exclusion: “Any patient marked as a test patient.”</p>
+<p>EMR for a total of 4330 patients were included in the extracted dataset, with 20141 valid records of anti-VEGF injections. The unit of analysis is the eye so criteria were applied at the eye level:</p>
+<ul>
+<li>2215 eyes received at least one anti-VEGF injection.</li>
+</ul>
+<p>A total of 2215 eyes from 1501 patients were included. A total of 20141 injection records remained giving 17926 treatment intervals (269 eyes received no further injections after the index date and so no treatment intervals were calculated for these).</p>
+</div>
+</div>
+<div id="descriptive-statistics" class="section level1" number="3">
+<h1><span class="header-section-number">3</span> Descriptive statistics</h1>
+<p>Basic descriptive statistics at the individual level are given in Table <a href="#tab:descriptives">3.1</a>). The majority of patients were male and received unilateral treatment. Table <a href="#tab:va-baseline">3.2</a> gives the Visual acuity at baseline (index date). The majority of eyes had VA between 33 and 73 ETDRS letters.</p>
+<table class=" lightable-paper" style="font-family: &quot;Arial Narrow&quot;, arial, helvetica, sans-serif; margin-left: auto; margin-right: auto;">
+<caption>
+<span id="tab:descriptives">Table 3.1: </span>Baseline demographics and characteristics of patients with DMO. Frequency and percentage reported for categorical variables.
 </caption>
 <thead>
 <tr>
@@ -218,13 +597,13 @@ Value
 <tbody>
 <tr>
 <td style="text-align:left;">
-IndexAge
+Age
 </td>
 <td style="text-align:left;">
-NA
+Median (Range)
 </td>
 <td style="text-align:left;">
-62.6 (14.2)
+65.2 (23.2, 98.8)
 </td>
 </tr>
 <tr>
@@ -235,7 +614,7 @@ Gender
 F
 </td>
 <td style="text-align:left;">
-122 (36.9%)
+719 (39.2%)
 </td>
 </tr>
 <tr>
@@ -246,7 +625,7 @@ Gender
 M
 </td>
 <td style="text-align:left;">
-209 (63.1%)
+1113 (60.8%)
 </td>
 </tr>
 <tr>
@@ -257,7 +636,7 @@ Treated
 Bilateral
 </td>
 <td style="text-align:left;">
-92 (27.8%)
+383 (20.9%)
 </td>
 </tr>
 <tr>
@@ -268,11 +647,1052 @@ Treated
 Unilateral
 </td>
 <td style="text-align:left;">
-239 (72.2%)
+1449 (79.1%)
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Individuals
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+1832 (100%)
 </td>
 </tr>
 </tbody>
 </table>
+<table class=" lightable-paper" style="font-family: &quot;Arial Narrow&quot;, arial, helvetica, sans-serif; margin-left: auto; margin-right: auto;">
+<caption>
+<span id="tab:va-baseline">Table 3.2: </span>Visual acuity at baseline. Frequency and percentage reported for categorical variables.
+</caption>
+<thead>
+<tr>
+<th style="text-align:left;">
+Variable
+</th>
+<th style="text-align:left;">
+Level
+</th>
+<th style="text-align:left;">
+Value
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+ETDRS letters
+</td>
+<td style="text-align:left;">
+Mean (SD)
+</td>
+<td style="text-align:left;">
+58.8 (19.9)
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+ETDRS category
+</td>
+<td style="text-align:left;">
+&lt;33 letters
+</td>
+<td style="text-align:left;">
+235 (10.6%)
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+ETDRS category
+</td>
+<td style="text-align:left;">
+33-73 letters
+</td>
+<td style="text-align:left;">
+1320 (59.6%)
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+ETDRS category
+</td>
+<td style="text-align:left;">
+&gt;73 letters
+</td>
+<td style="text-align:left;">
+564 (25.5%)
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+ETDRS category
+</td>
+<td style="text-align:left;">
+Missing
+</td>
+<td style="text-align:left;">
+96 (4.33%)
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Eyes
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+2215 (100%)
+</td>
+</tr>
+</tbody>
+</table>
+<p>Table <a href="#tab:descriptives-by-injections">3.3</a> gives the distribution of baseline characteristics by the number of injections received. In comparison with other groups, a much greater proportion of those that received only a single injection had very poor visual acuity at baseline.</p>
+<table class=" lightable-paper" style="font-family: &quot;Arial Narrow&quot;, arial, helvetica, sans-serif; margin-left: auto; margin-right: auto;">
+<caption>
+<span id="tab:descriptives-by-injections">Table 3.3: </span>Baseline demographics, visual acuity and years under treatment by number of injections received during study period. Frequency and percentage reported for categorical variables.
+</caption>
+<thead>
+<tr>
+<th style="text-align:left;">
+Variable
+</th>
+<th style="text-align:left;">
+Level
+</th>
+<th style="text-align:left;">
+0 &lt; n &lt;= 1
+</th>
+<th style="text-align:left;">
+1 &lt; n &lt;= 2
+</th>
+<th style="text-align:left;">
+2 &lt; n &lt;= 3
+</th>
+<th style="text-align:left;">
+3 &lt; n &lt;= 12
+</th>
+<th style="text-align:left;">
+12 &lt; n &lt;= 61
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+Age
+</td>
+<td style="text-align:left;">
+Median (Range)
+</td>
+<td style="text-align:left;">
+61.3 (23.4, 98.6)
+</td>
+<td style="text-align:left;">
+61.4 (25.3, 91.3)
+</td>
+<td style="text-align:left;">
+66.8 (23.4, 98.8)
+</td>
+<td style="text-align:left;">
+65.7 (23.2, 97.8)
+</td>
+<td style="text-align:left;">
+65.6 (25.5, 93)
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Gender
+</td>
+<td style="text-align:left;">
+F
+</td>
+<td style="text-align:left;">
+101 (37.5%)
+</td>
+<td style="text-align:left;">
+60 (37.7%)
+</td>
+<td style="text-align:left;">
+114 (42.1%)
+</td>
+<td style="text-align:left;">
+403 (40.8%)
+</td>
+<td style="text-align:left;">
+207 (39.1%)
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Gender
+</td>
+<td style="text-align:left;">
+M
+</td>
+<td style="text-align:left;">
+168 (62.5%)
+</td>
+<td style="text-align:left;">
+99 (62.3%)
+</td>
+<td style="text-align:left;">
+157 (57.9%)
+</td>
+<td style="text-align:left;">
+584 (59.2%)
+</td>
+<td style="text-align:left;">
+322 (60.9%)
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+ETDRS letters
+</td>
+<td style="text-align:left;">
+Mean (SD)
+</td>
+<td style="text-align:left;">
+44 (29.6)
+</td>
+<td style="text-align:left;">
+56.3 (21.3)
+</td>
+<td style="text-align:left;">
+59.6 (19.3)
+</td>
+<td style="text-align:left;">
+61.4 (16.9)
+</td>
+<td style="text-align:left;">
+61.4 (15.5)
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+ETDRS category
+</td>
+<td style="text-align:left;">
+&lt;33 letters
+</td>
+<td style="text-align:left;">
+89 (33.1%)
+</td>
+<td style="text-align:left;">
+21 (13.2%)
+</td>
+<td style="text-align:left;">
+26 (9.59%)
+</td>
+<td style="text-align:left;">
+73 (7.4%)
+</td>
+<td style="text-align:left;">
+26 (4.91%)
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+ETDRS category
+</td>
+<td style="text-align:left;">
+33-73 letters
+</td>
+<td style="text-align:left;">
+100 (37.2%)
+</td>
+<td style="text-align:left;">
+99 (62.3%)
+</td>
+<td style="text-align:left;">
+160 (59%)
+</td>
+<td style="text-align:left;">
+604 (61.2%)
+</td>
+<td style="text-align:left;">
+357 (67.5%)
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+ETDRS category
+</td>
+<td style="text-align:left;">
+&gt;73 letters
+</td>
+<td style="text-align:left;">
+55 (20.4%)
+</td>
+<td style="text-align:left;">
+35 (22%)
+</td>
+<td style="text-align:left;">
+75 (27.7%)
+</td>
+<td style="text-align:left;">
+273 (27.7%)
+</td>
+<td style="text-align:left;">
+126 (23.8%)
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+ETDRS category
+</td>
+<td style="text-align:left;">
+Missing
+</td>
+<td style="text-align:left;">
+25 (9.29%)
+</td>
+<td style="text-align:left;">
+4 (2.52%)
+</td>
+<td style="text-align:left;">
+10 (3.69%)
+</td>
+<td style="text-align:left;">
+37 (3.75%)
+</td>
+<td style="text-align:left;">
+20 (3.78%)
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Years under treatment
+</td>
+<td style="text-align:left;">
+Mean (SD)
+</td>
+<td style="text-align:left;">
+0 (0)
+</td>
+<td style="text-align:left;">
+0.344 (0.593)
+</td>
+<td style="text-align:left;">
+0.406 (0.541)
+</td>
+<td style="text-align:left;">
+1.77 (1.21)
+</td>
+<td style="text-align:left;">
+4.67 (1.57)
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Eyes
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+269 (100%)
+</td>
+<td style="text-align:left;">
+159 (100%)
+</td>
+<td style="text-align:left;">
+271 (100%)
+</td>
+<td style="text-align:left;">
+987 (100%)
+</td>
+<td style="text-align:left;">
+529 (100%)
+</td>
+</tr>
+</tbody>
+</table>
+<p>The proportion of eyes with a treatment interval exceeding 12 weeks increased with year of treatment (time since index date) (Table <a href="#tab:descriptives-gt12-weeks">3.4</a>). Those with no treatment intervals exceeding 12 weeks during a given year were more likely to have had worse visual acuity at baseline (compare ETDRS letters in Tables <a href="#tab:descriptives-none-gt12-weeks">3.5</a> and <a href="#tab:descriptives-any-gt12-weeks">3.6</a>). This suggests that worse visual acuity at baseline is associated with reduced probability of extended treatment intervals, even many years into treatment.</p>
+<table class=" lightable-paper" style="font-family: &quot;Arial Narrow&quot;, arial, helvetica, sans-serif; margin-left: auto; margin-right: auto;">
+<caption>
+<span id="tab:descriptives-gt12-weeks">Table 3.4: </span>Distribution of interval lengths by year of treatment.
+</caption>
+<thead>
+<tr>
+<th style="text-align:left;">
+Variable
+</th>
+<th style="text-align:left;">
+Level
+</th>
+<th style="text-align:left;">
+1
+</th>
+<th style="text-align:left;">
+2
+</th>
+<th style="text-align:left;">
+3
+</th>
+<th style="text-align:left;">
+4
+</th>
+<th style="text-align:left;">
+5
+</th>
+<th style="text-align:left;">
+&gt;=6
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+Any intervals &gt;12 weeks
+</td>
+<td style="text-align:left;">
+FALSE
+</td>
+<td style="text-align:left;">
+668 (34.3%)
+</td>
+<td style="text-align:left;">
+230 (24.5%)
+</td>
+<td style="text-align:left;">
+132 (20.3%)
+</td>
+<td style="text-align:left;">
+74 (17.5%)
+</td>
+<td style="text-align:left;">
+42 (14.8%)
+</td>
+<td style="text-align:left;">
+26 (13.7%)
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Any intervals &gt;12 weeks
+</td>
+<td style="text-align:left;">
+TRUE
+</td>
+<td style="text-align:left;">
+1278 (65.7%)
+</td>
+<td style="text-align:left;">
+707 (75.5%)
+</td>
+<td style="text-align:left;">
+519 (79.7%)
+</td>
+<td style="text-align:left;">
+350 (82.5%)
+</td>
+<td style="text-align:left;">
+242 (85.2%)
+</td>
+<td style="text-align:left;">
+164 (86.3%)
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+N intervals &gt; 12 weeks
+</td>
+<td style="text-align:left;">
+Median (IQR)
+</td>
+<td style="text-align:left;">
+1 (0, 1)
+</td>
+<td style="text-align:left;">
+1 (1, 2)
+</td>
+<td style="text-align:left;">
+1 (1, 2)
+</td>
+<td style="text-align:left;">
+1 (1, 2)
+</td>
+<td style="text-align:left;">
+1 (1, 2)
+</td>
+<td style="text-align:left;">
+1 (1, 3)
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Eyes
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+1946 (100%)
+</td>
+<td style="text-align:left;">
+937 (100%)
+</td>
+<td style="text-align:left;">
+651 (100%)
+</td>
+<td style="text-align:left;">
+424 (100%)
+</td>
+<td style="text-align:left;">
+284 (100%)
+</td>
+<td style="text-align:left;">
+190 (100%)
+</td>
+</tr>
+</tbody>
+</table>
+<table class=" lightable-paper" style="font-family: &quot;Arial Narrow&quot;, arial, helvetica, sans-serif; margin-left: auto; margin-right: auto;">
+<caption>
+<span id="tab:descriptives-none-gt12-weeks">Table 3.5: </span>Baseline demographics and visual acuity by year of treatment among those with NO treatment interval greater than 12 weeks during that year of treatment. Frequency and percentage reported for categorical variables.
+</caption>
+<thead>
+<tr>
+<th style="text-align:left;">
+Variable
+</th>
+<th style="text-align:left;">
+Level
+</th>
+<th style="text-align:left;">
+1
+</th>
+<th style="text-align:left;">
+2
+</th>
+<th style="text-align:left;">
+3
+</th>
+<th style="text-align:left;">
+4
+</th>
+<th style="text-align:left;">
+5
+</th>
+<th style="text-align:left;">
+&gt;=6
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+Age
+</td>
+<td style="text-align:left;">
+Median (Range)
+</td>
+<td style="text-align:left;">
+65.3 (23.4, 98.8)
+</td>
+<td style="text-align:left;">
+65.5 (23.2, 88.5)
+</td>
+<td style="text-align:left;">
+63 (26.7, 90.3)
+</td>
+<td style="text-align:left;">
+60.6 (37.9, 84.9)
+</td>
+<td style="text-align:left;">
+65 (37.3, 81.6)
+</td>
+<td style="text-align:left;">
+63.7 (25.9, 84.7)
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Gender
+</td>
+<td style="text-align:left;">
+F
+</td>
+<td style="text-align:left;">
+271 (40.6%)
+</td>
+<td style="text-align:left;">
+96 (41.7%)
+</td>
+<td style="text-align:left;">
+59 (44.7%)
+</td>
+<td style="text-align:left;">
+28 (37.8%)
+</td>
+<td style="text-align:left;">
+18 (42.9%)
+</td>
+<td style="text-align:left;">
+9 (34.6%)
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Gender
+</td>
+<td style="text-align:left;">
+M
+</td>
+<td style="text-align:left;">
+397 (59.4%)
+</td>
+<td style="text-align:left;">
+134 (58.3%)
+</td>
+<td style="text-align:left;">
+73 (55.3%)
+</td>
+<td style="text-align:left;">
+46 (62.2%)
+</td>
+<td style="text-align:left;">
+24 (57.1%)
+</td>
+<td style="text-align:left;">
+17 (65.4%)
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+ETDRS letters
+</td>
+<td style="text-align:left;">
+Mean (SD)
+</td>
+<td style="text-align:left;">
+59.8 (17.7)
+</td>
+<td style="text-align:left;">
+60.6 (16.4)
+</td>
+<td style="text-align:left;">
+59.6 (15.4)
+</td>
+<td style="text-align:left;">
+61.2 (17.6)
+</td>
+<td style="text-align:left;">
+60.7 (16.3)
+</td>
+<td style="text-align:left;">
+60.2 (14.6)
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+ETDRS category
+</td>
+<td style="text-align:left;">
+&lt;33 letters
+</td>
+<td style="text-align:left;">
+52 (7.78%)
+</td>
+<td style="text-align:left;">
+17 (7.39%)
+</td>
+<td style="text-align:left;">
+7 (5.3%)
+</td>
+<td style="text-align:left;">
+6 (8.11%)
+</td>
+<td style="text-align:left;">
+2 (4.76%)
+</td>
+<td style="text-align:left;">
+2 (7.69%)
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+ETDRS category
+</td>
+<td style="text-align:left;">
+33-73 letters
+</td>
+<td style="text-align:left;">
+434 (65%)
+</td>
+<td style="text-align:left;">
+158 (68.7%)
+</td>
+<td style="text-align:left;">
+91 (68.9%)
+</td>
+<td style="text-align:left;">
+46 (62.2%)
+</td>
+<td style="text-align:left;">
+26 (61.9%)
+</td>
+<td style="text-align:left;">
+17 (65.4%)
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+ETDRS category
+</td>
+<td style="text-align:left;">
+&gt;73 letters
+</td>
+<td style="text-align:left;">
+156 (23.4%)
+</td>
+<td style="text-align:left;">
+47 (20.4%)
+</td>
+<td style="text-align:left;">
+27 (20.5%)
+</td>
+<td style="text-align:left;">
+21 (28.4%)
+</td>
+<td style="text-align:left;">
+10 (23.8%)
+</td>
+<td style="text-align:left;">
+5 (19.2%)
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+ETDRS category
+</td>
+<td style="text-align:left;">
+Missing
+</td>
+<td style="text-align:left;">
+26 (3.89%)
+</td>
+<td style="text-align:left;">
+8 (3.48%)
+</td>
+<td style="text-align:left;">
+7 (5.3%)
+</td>
+<td style="text-align:left;">
+1 (1.35%)
+</td>
+<td style="text-align:left;">
+4 (9.52%)
+</td>
+<td style="text-align:left;">
+2 (7.69%)
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Eyes
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+668 (100%)
+</td>
+<td style="text-align:left;">
+230 (100%)
+</td>
+<td style="text-align:left;">
+132 (100%)
+</td>
+<td style="text-align:left;">
+74 (100%)
+</td>
+<td style="text-align:left;">
+42 (100%)
+</td>
+<td style="text-align:left;">
+26 (100%)
+</td>
+</tr>
+</tbody>
+</table>
+<table class=" lightable-paper" style="font-family: &quot;Arial Narrow&quot;, arial, helvetica, sans-serif; margin-left: auto; margin-right: auto;">
+<caption>
+<span id="tab:descriptives-any-gt12-weeks">Table 3.6: </span>Baseline demographics and visual acuity by year of treatment among those with AT LEAST ONE treatment interval greater than 12 weeks during that year of treatment. Frequency and percentage reported for categorical variables.
+</caption>
+<thead>
+<tr>
+<th style="text-align:left;">
+Variable
+</th>
+<th style="text-align:left;">
+Level
+</th>
+<th style="text-align:left;">
+1
+</th>
+<th style="text-align:left;">
+2
+</th>
+<th style="text-align:left;">
+3
+</th>
+<th style="text-align:left;">
+4
+</th>
+<th style="text-align:left;">
+5
+</th>
+<th style="text-align:left;">
+&gt;=6
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+Age
+</td>
+<td style="text-align:left;">
+Median (Range)
+</td>
+<td style="text-align:left;">
+65.6 (23.2, 94)
+</td>
+<td style="text-align:left;">
+66 (24.8, 93)
+</td>
+<td style="text-align:left;">
+66.7 (24.8, 93)
+</td>
+<td style="text-align:left;">
+66.4 (25.9, 88.5)
+</td>
+<td style="text-align:left;">
+65.5 (26.7, 88.5)
+</td>
+<td style="text-align:left;">
+64.9 (26.2, 88.5)
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Gender
+</td>
+<td style="text-align:left;">
+F
+</td>
+<td style="text-align:left;">
+513 (40.1%)
+</td>
+<td style="text-align:left;">
+294 (41.6%)
+</td>
+<td style="text-align:left;">
+202 (38.9%)
+</td>
+<td style="text-align:left;">
+144 (41.1%)
+</td>
+<td style="text-align:left;">
+97 (40.1%)
+</td>
+<td style="text-align:left;">
+61 (37.2%)
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Gender
+</td>
+<td style="text-align:left;">
+M
+</td>
+<td style="text-align:left;">
+765 (59.9%)
+</td>
+<td style="text-align:left;">
+413 (58.4%)
+</td>
+<td style="text-align:left;">
+317 (61.1%)
+</td>
+<td style="text-align:left;">
+206 (58.9%)
+</td>
+<td style="text-align:left;">
+145 (59.9%)
+</td>
+<td style="text-align:left;">
+103 (62.8%)
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+ETDRS letters
+</td>
+<td style="text-align:left;">
+Mean (SD)
+</td>
+<td style="text-align:left;">
+61.2 (17.2)
+</td>
+<td style="text-align:left;">
+61.7 (16.3)
+</td>
+<td style="text-align:left;">
+61.9 (15.5)
+</td>
+<td style="text-align:left;">
+62.2 (14.9)
+</td>
+<td style="text-align:left;">
+62.7 (14.5)
+</td>
+<td style="text-align:left;">
+63.2 (14.4)
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+ETDRS category
+</td>
+<td style="text-align:left;">
+&lt;33 letters
+</td>
+<td style="text-align:left;">
+94 (7.36%)
+</td>
+<td style="text-align:left;">
+40 (5.66%)
+</td>
+<td style="text-align:left;">
+25 (4.82%)
+</td>
+<td style="text-align:left;">
+15 (4.29%)
+</td>
+<td style="text-align:left;">
+8 (3.31%)
+</td>
+<td style="text-align:left;">
+5 (3.05%)
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+ETDRS category
+</td>
+<td style="text-align:left;">
+33-73 letters
+</td>
+<td style="text-align:left;">
+786 (61.5%)
+</td>
+<td style="text-align:left;">
+439 (62.1%)
+</td>
+<td style="text-align:left;">
+349 (67.2%)
+</td>
+<td style="text-align:left;">
+236 (67.4%)
+</td>
+<td style="text-align:left;">
+160 (66.1%)
+</td>
+<td style="text-align:left;">
+103 (62.8%)
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+ETDRS category
+</td>
+<td style="text-align:left;">
+&gt;73 letters
+</td>
+<td style="text-align:left;">
+353 (27.6%)
+</td>
+<td style="text-align:left;">
+200 (28.3%)
+</td>
+<td style="text-align:left;">
+131 (25.2%)
+</td>
+<td style="text-align:left;">
+84 (24%)
+</td>
+<td style="text-align:left;">
+63 (26%)
+</td>
+<td style="text-align:left;">
+48 (29.3%)
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+ETDRS category
+</td>
+<td style="text-align:left;">
+Missing
+</td>
+<td style="text-align:left;">
+45 (3.52%)
+</td>
+<td style="text-align:left;">
+28 (3.96%)
+</td>
+<td style="text-align:left;">
+14 (2.7%)
+</td>
+<td style="text-align:left;">
+15 (4.29%)
+</td>
+<td style="text-align:left;">
+11 (4.55%)
+</td>
+<td style="text-align:left;">
+8 (4.88%)
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Eyes
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+1278 (100%)
+</td>
+<td style="text-align:left;">
+707 (100%)
+</td>
+<td style="text-align:left;">
+519 (100%)
+</td>
+<td style="text-align:left;">
+350 (100%)
+</td>
+<td style="text-align:left;">
+242 (100%)
+</td>
+<td style="text-align:left;">
+164 (100%)
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div id="treatment-sequences" class="section level1" number="4">
+<h1><span class="header-section-number">4</span> Treatment sequences</h1>
+<div class="figure"><span id="fig:treatment-intervals"></span>
+<img src="data:image/png;base64,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" alt="Treatment sequences for a sample of eyes." width="672" />
+<p class="caption">
+Figure 4.1: Treatment sequences for a sample of eyes.
+</p>
+</div>
 </div>
 
 

@@ -1,0 +1,129 @@
+---
+title: "BIRAX study - visual acuity"
+author: "David M Wright - d.wright@qub.ac.uk"
+date: "Document compiled: `r Sys.Date()`"
+output: 
+  bookdown::html_document2:
+     toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(knitr)
+library(kableExtra)
+library(rprojroot)
+library(tidyverse)
+```
+
+`r R.version.string`   
+
+# Introduction
+
+This analysis is of Electronic Medical Records (EMR) from the Belfast Health and Social Care Trust Macular Service. The aim of the study is to investigate the potential for machine learning to identify factors and biomarkers associated with long-term AMD treatment response.
+
+This document describes visual acuity outcomes over time in an analysis cohort of patients beginning anti-VEGF treatment for wet AMD. Cohort construction is described in 'BIRAX-cohort-construction.Rmd`.
+
+```{r run-analysis, include=FALSE}
+source(find_rstudio_root_file("Code/BIRAX-visual-acuity.R"))
+```
+
+
+
+## Visual acuity changes over time
+
+There was a pattern of slight improvements in visual acuity by the end of the first year of treatment (Table \@ref(tab:va-descriptives)). This was followed by a steady decline in the subsequent years, with mean VA returning to baseline levels between years 3 and 4 and declining further in the remaining years. 
+
+```{r va-descriptives}
+va_history %>% 
+  filter(snapshot) %>%
+  transmute(follow_up_year, va_logmar, va_change_logmar, va_etdrs, va_change_etdrs, va_change_lines, va_category_snellen, Eyes = "n") %>% 
+  GenerateDescriptives(col_var = follow_up_year,
+                       type = c(va_logmar = "Mean (Range)", va_etdrs = "Median (IQR)", va_change_etdrs = "Median (IQR)")) %>%
+  left_join(var_desc, by = "Variable") %>%
+   mutate(Description = coalesce(Description, Variable)) %>%
+  select(Description, everything(), -Variable) %>%
+  kbl(caption = "Distribution of visual acuity outcomes at the end of each year of anti-VEGF treatment. '0' indicates baseline measurements.") %>% 
+  kable_paper()
+```
+
+```{r snapshots}
+snapshots %>% 
+  transmute(`Follow up time (years)` = follow_up_year, `Acceptable tolerance (months)` = tolerance) %>% 
+  kbl(caption = "Time points of interest during anti-VEGF treatment for AMD. Tolerance indicates the maximum distance from the point of interest within which a measurement would be included in analysis.") %>% 
+  kable_paper()
+```
+
+Frequency of both OCT exams and injections decreased with each year of treatment (Tables \@ref(tab:oct-by-year) and \@ref(tab:injections-by-year)), corresponding to modest increases in the proportion of eyes with at least one treatment interval > 80 days in each year of treatment (Table \@ref(tab:injection-intervals-by-year)). Patients may/may not have received an OCT/injection in a given year, so different denominators are used in each of these tables, none of which gives the total number of eyes under treatment (this could be calculated from the overall injection history records).
+
+```{r oct-by-year}
+bind_rows(
+    oct_history %>% 
+      count(PatientID, EyeCode, treatment_year, name = "OCT exams") %>% 
+      inner_join(snapshots %>% 
+                   filter(follow_up_year != "0"), by = c("treatment_year" = "follow_up_year")) %>% 
+      mutate(Received = cut(`OCT exams`, breaks = c(0,4,7, max(.$`OCT exams`)),
+                        labels = c("<5 per year", "5-7 per year", ">=8 per year")),
+             Eyes = " ") %>% 
+      select(treatment_year,  `OCT exams`, Received, Eyes) %>% 
+      GenerateDescriptives(col_var = treatment_year),
+    
+    oct_history %>% 
+      transmute(treatment_year, `Total OCT exams` = " ") %>% 
+      inner_join(snapshots %>% 
+                   filter(follow_up_year != "0") %>% select(follow_up_year), by = c("treatment_year" = "follow_up_year")) %>% 
+      GenerateDescriptives(col_var = treatment_year)
+  ) %>% 
+    kbl(caption = "Distribution of OCT exams received by year of anti-VEGF treatment.") %>% 
+    kable_paper()
+```
+
+## Outcomes by visual acuity at baseline
+
+```{r va-descriptives-by-baseline-va}
+bind_rows(
+  va_history %>%
+    filter(snapshot) %>% 
+    transmute(follow_up_year, va_logmar, va_category_snellen) %>%
+    group_by(va_category_snellen) %>%
+    nest() %>%
+    mutate(df = map(
+      .x = data,
+      .f = ~ GenerateDescriptives(., col_var = follow_up_year)
+    )) %>%
+    select(-data) %>%
+    unnest(cols = c(df)) %>%
+    arrange(va_category_snellen),
+  
+  va_history %>%
+    filter(snapshot) %>% 
+    transmute(follow_up_year, va_change_lines, va_category_snellen, Eyes = "n") %>%
+    group_by(va_category_snellen) %>%
+    nest() %>%
+    mutate(df = map(
+      .x = data,
+      .f = ~ GenerateDescriptives(., col_var = follow_up_year)
+    )) %>%
+    select(-data) %>%
+    unnest(cols = c(df)) %>%
+    arrange(va_category_snellen)
+) %>%
+  
+  left_join(var_desc, by = "Variable") %>%
+  mutate(Description = coalesce(Description, Variable)) %>%
+  select(Description, everything(),-Variable) %>%
+  rename(`Baseline VA category` = va_category_snellen) %>%
+  kbl(caption = "Distribution of visual acuity outcomes at the end of each year of anti-VEGF treatment by baseline visual acuity. '0' indicates baseline measurements.") %>%
+  kable_paper()
+```
+
+
+
+
+## VA distribution
+
+```{r va-baseline-histogram}
+eye %>% 
+  ggplot(aes(x = va_logmar)) +
+  geom_histogram(bins = 40) +
+  theme_light()
+```

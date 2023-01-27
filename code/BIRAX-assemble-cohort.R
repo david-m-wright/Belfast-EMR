@@ -228,15 +228,16 @@ va_history_raw <- va_raw %>%
   # (max roll forward is 2 weeks)
   mutate(months_since_index = if_else(baseline & months_since_index > -0.5 & months_since_index < 0, 0, months_since_index)) %>% 
   # Exclude all measurements prior to baseline
-  filter(months_since_index >= 0)
+  filter(months_since_index >= 0) %>% 
+  mutate(treatment_months = ceiling(months_since_index))
 
 # Take snapshots of VA at various stages of follow-up
 # Find closest VA measurement to each of the specified snapshot times, within set tolerances
 # Follow-up times in months at which the VA status is to be taken, along with acceptable tolerances
 # Baseline dates must match exactly
-snapshots <- data.table(months_since_index = c(0, 12, 24, 36, 48, 60, 84, 120), 
-                        follow_up_month = c(0, 12, 24, 36, 48, 60, 84, 120), 
-                        tolerance = c(0, 2, 2, 2, 2, 2,2,2),
+snapshots <- data.table(months_since_index = c(0, 6, 12, 24, 36, 48, 60, 84, 120), 
+                        follow_up_month = c(0, 6, 12, 24, 36, 48, 60, 84, 120), 
+                        tolerance = c(0, 2, 2, 2, 2, 2, 2,2,2),
                         key = "months_since_index") %>% 
   .[, `:=` (lower_lim = follow_up_month - tolerance,
             upper_lim = follow_up_month + tolerance,
@@ -395,7 +396,7 @@ PlotETDRSGrid <- function(dat, label_col){
     inner_join(etdrs_rect, by = c("region", "circ")) %>% 
   
     ggplot(aes(x = xtext, y = ytext)) +
-    geom_rect(data = filter(etdrs_rect, region != "CS"), aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax), fill = "white", colour = "black", size = 1.5) + 
+    geom_rect(data = filter(etdrs_rect, region != "CS"), aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax), fill = "white", colour = "black", linewidth = 1.5) + 
     geom_rect(data = filter(etdrs_rect, region == "CS"), aes(xmin = xmin+0.01, xmax = xmax-0.01, ymin = ymin+0.01, ymax = ymax-0.01), fill = "white") +
     geom_text(aes(label = !!label_value)) +
     scale_y_continuous(breaks = NULL) +
@@ -411,7 +412,7 @@ PlotETDRSGrid <- function(dat, label_col){
 #   filter(str_detect(abbr_metric, "IRF Vol")) %>% 
 #   PlotETDRSGrid(valform) 
 
-
+ 
 
 
 ## Calculate treatment intervals for the selected eyes
@@ -451,6 +452,31 @@ treatment_intervals <- injections %>%
   mutate(injection_seq = row_number()) %>% 
   ungroup() %>% 
   mutate(sequence_id = abbreviate(paste(PatientID, EyeCode))) 
+
+
+## Cohorts for sub-analyses
+
+# Fluid dynamics analysis
+
+# List of eyes to be included in the fluid treatment response analysis
+fluid_eyes <- fluid_history %>% 
+  count(PatientID, EyeCode, name = "measurements") %>% 
+  # Those with > 3 fluid measurements (short sequences unlikely to be informative)
+  filter(measurements > 3)
+
+# List of eyes for 3 year outcome analysis
+three_yr_eyes <- eye %>% 
+  filter(years_observed >= 3) %>% 
+  select(PatientID, EyeCode)
+
+
+
+
+## Write out files
+
+# eye %>% 
+#    select(PatientID, EyeCode, index_date) %>% 
+#    write_csv(find_rstudio_root_file("data", "BIRAX data", "cohort", paste0("BIRAX-cohort-eyes-", Sys.Date(), ".csv")))
 
 
 

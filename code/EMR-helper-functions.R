@@ -209,7 +209,8 @@ GenerateDescriptives <- function(data, col_var = NULL, type = NULL, sig_digits =
                            out_tab %>% 
                              mutate(across(-1, ~paste0(., " (", signif(./sum(.)*100, digits = sig_digits), "%)"))) %>%
                              rename_with(~"Value", .cols = (matches("^n$"))) %>%
-                             rename(Level = .data[[.x]]) %>%
+                             # rename(Level = .data[[.x]]) %>%
+                             rename(Level = all_of(.x)) %>%
                              mutate(across(Level, as.character))
                            
                            # DiscreteFrequency(data, row_var = .data[[.x]], col_var = {{col_var}}, sig_digits = sig_digits)
