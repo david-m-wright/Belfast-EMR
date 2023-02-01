@@ -265,7 +265,10 @@ va_history <- snapshots[va_history_raw, roll = "nearest"][
   # Classify VA change into three categories
   , va_change_lines := cut(va_change_logmar, 
                                breaks = c(min(va_change_logmar), -0.2, 0.19, max(va_change_logmar)), 
-                               labels = c("gained >=2 lines", "< 2 lines change", "lost >= 2 lines"), include.lowest = TRUE)]
+                               labels = c("gained >=2 lines", "< 2 lines change", "lost >= 2 lines"), include.lowest = TRUE)][
+                                 # Add the treatment year to match up with injection counts
+                                 , treatment_year := as.factor(floor(years_since_index)+1)]
+
 
 # Note that the 'lines changed' classification breaks down for those with very low vision (e.g. counting fingers)
 # va_history[PatientID=="EB9B623B-3B63-26EF-E293-64A5575590EA" & EyeCode=="L", .(EncounterDate,va_logmar, va_change_logmar, va_etdrs, va_change_etdrs, va_change_lines)]
@@ -352,6 +355,17 @@ va_fl <- eye %>%
 va_fl_correlations <- va_fl %>% 
   select(all_of(c(noa_fluid, noa_retinal, noa_grid)) & where(is.numeric)) %>% 
   map(~cor.test(.x, va_fl$va_logmar)) %>% 
+  map_dfr(~broom::tidy(.), .id = "Variable") %>% 
+  mutate(across(p.value, format.pval, eps = 0.001, digits = 2),
+         across(c(estimate, conf.low, conf.high), .fns = ~formatC(.x, format = "f", digits = 2))) %>% 
+  mutate(`Correlation with VA` = paste0(estimate, " (", conf.low, ", ", conf.high, ")")) %>% 
+  transmute(Variable, estimate, `Correlation with VA`,  P = p.value)
+
+# Correlations between VA and fluid measurements only among those with IRF AND SRF at baseline
+va_fl_correlations_srf_irf <- va_fl %>% 
+  filter(amd_type == "SRF and IRF") %>% 
+  select(all_of(c(noa_fluid, noa_retinal, noa_grid)) & where(is.numeric)) %>% 
+  map(~cor.test(.x, filter(va_fl, amd_type == "SRF and IRF")$va_logmar)) %>% 
   map_dfr(~broom::tidy(.), .id = "Variable") %>% 
   mutate(across(p.value, format.pval, eps = 0.001, digits = 2),
          across(c(estimate, conf.low, conf.high), .fns = ~formatC(.x, format = "f", digits = 2))) %>% 
