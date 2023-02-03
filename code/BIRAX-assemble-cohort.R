@@ -492,5 +492,4 @@ three_yr_eyes <- eye %>%
 #    select(PatientID, EyeCode, index_date) %>% 
 #    write_csv(find_rstudio_root_file("data", "BIRAX data", "cohort", paste0("BIRAX-cohort-eyes-", Sys.Date(), ".csv")))
 
-
-
+ 

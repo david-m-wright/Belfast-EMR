@@ -21,21 +21,33 @@ library(janitor)
 
 ```{r run-analysis, include=FALSE}
 source(find_rstudio_root_file("Code/BIRAX-injection-demand.R"))
+source(find_rstudio_root_file("Code/BIRAX-injection-demand-SL.R"))
+source(find_rstudio_root_file("Code/BIRAX-injection-demand- years-SL.R"))
+source(find_rstudio_root_file("Code/BIRAX-visual-acuity-years-SL.R"))
+source(find_rstudio_root_file("Code/BIRAX-treatment-SL.R"))
 ```
 
 # Introduction
 
-This analysis is of Electronic Medical Records (EMR) from the Belfast Health and Social Care Trust Macular Service. The aim of the study is to investigate the potential for machine learning to identify factors and biomarkers associated with long-term AMD treatment response.
+This study is of Electronic Medical Records (EMR) from the Belfast Health and Social Care Trust Macular Service. The aim of the study is to investigate the potential for machine learning to identify factors and biomarkers associated with long-term AMD treatment response.
 
-This analysis investigates the extent to which the number of anti-VEGF injections received by each eye can be predicted based on measurements of retinal fluid produced by the Notal Ophthalmic Analyzer (NOA). The outcome of interest is the number of injections received by an eye in the first three years of treatment. The input variables were the retinal fluid measurements at baseline and at six months.
+This analysis investigates the extent to which the number of anti-VEGF injections received by each eye, the length of treatment, and visual acuity following treatment can be predicted based on measurements of retinal fluid produced by the Notal Ophthalmic Analyzer (NOA) at baseline and at six months. 
+
+The following outcomes were investigated:
+
+1. The total number of injections received by an eye in the first three years of treatment.
+2. The number of injections received by an eye in each of the first three years of treatment.   
+3. Visual acuity at the end of each year of treatment
+4. The length of treatment (time from baseline to final injection).   
 
 Cohort construction is described in 'BIRAX-cohort-construction.html` (`r nrow(eye_demand_raw)` eyes from `r nrow(distinct(eye_demand_raw, PatientID))` patients).
 
-* Excluded `r nrow(filter(eye_demand_raw, exclude_three_yrs_observed))` eyes observed for $<3$ years.   
+* Excluded `r nrow(filter(eye_demand_raw, exclude_three_yrs_observed))` eyes observed for $<3$ years.  Observation time was from baseline to date of death or date of data extraction, whichever was earlier. This criterion was applied to ensure that each eye was observed for long enough so that the outcomes of interest could be measured.   
 * Excluded `r nrow(filter(eye_demand_raw, !exclude_three_yrs_observed, exclude_fluid_eyes))` eyes with $\leq 3$ fluid measurements in total.    
 * Excluded `r nrow(filter(eye_demand_raw, exclude_three_yrs_observed, !exclude_fluid_eyes, exclude_6months_fluid))` eyes without a fluid measurement at 6 months (+-2 months, Figure \@ref(fig:close-to-snapshot)).    
 
 A total of `r nrow(eye_demand)` eyes from `r nrow(distinct(eye_demand, PatientID))` patients remained after these exclusions.
+
 
 ```{r close-to-snapshot, fig.cap="Distribution of actual times since baseline for the 'Six month' fluid measurement."}
 fluid_6months_imp_demand %>%
@@ -47,7 +59,7 @@ fluid_6months_imp_demand %>%
     by = c("PatientID", "EyeCode")
   ) %>%
   ggplot(aes(x = months_since_index)) +
-  geom_histogram(bins = 25) +
+  geom_histogram(bins = 25, fill = "white", colour= "black") +
   theme_light() +
   labs(x = "Months since baseline",
        y = "Count")
@@ -66,7 +78,7 @@ eye_demand %>%
 ```{r follow-up-length}
 bind_rows(
   eye_demand %>%
-    inner_join(three_years_n_injections, by = c("PatientID", "EyeCode")) %>%
+    inner_join(injections_yr, by = c("PatientID", "EyeCode")) %>%
     transmute(Injections = three_yr_injections,
               `Total injections` = three_yr_injections) %>%
     GenerateDescriptives(type = c(
@@ -127,7 +139,7 @@ bind_rows(
       )
     )
 ) %>%
-  kbl(caption = "Number of injections and examinations and length of follow-up.") %>%
+  kbl(caption = "Number of injections and examinations in first three years of treatment.") %>%
   kable_paper()
 ```
 
@@ -137,7 +149,7 @@ bind_rows(
 va_history_demand %>% 
   filter(baseline) %>% 
   transmute(va_logmar, va_etdrs, va_category_snellen, Eyes = "n") %>% 
-  GenerateDescriptives(type = c(va_logmar = "Mean (Range)", va_etdrs = "Median (IQR)")) %>% 
+  GenerateDescriptives(type = c(va_logmar = "Median (Range)", va_etdrs = "Median (IQR)")) %>% 
   left_join(var_desc, by = "Variable") %>%
   mutate(Description = coalesce(Description, Variable)) %>%
   select(Description, everything(), -Variable) %>%
@@ -154,7 +166,7 @@ va_history_demand %>%
   filter(baseline),
 by = c("PatientID", "EyeCode")) %>% 
   transmute(amd_type, va_logmar, va_etdrs, va_category_snellen, Eyes = "n") %>% 
-  GenerateDescriptives(col_var = amd_type, type = c(va_logmar = "Mean (Range)", va_etdrs = "Median (IQR)")) %>% 
+  GenerateDescriptives(col_var = amd_type, type = c(va_logmar = "Median (Range)", va_etdrs = "Median (IQR)")) %>% 
   left_join(var_desc, by = "Variable") %>%
   mutate(Description = coalesce(Description, Variable)) %>%
   select(Description, everything(), -Variable) %>%
@@ -163,51 +175,50 @@ by = c("PatientID", "EyeCode")) %>%
 ```
 
 
-# Prediction task
+# Machine learning pipeline
 
-## Model structure
-
-An ensemble machine learning pipeline was used to find the best prediction for each eye, using a diverse set of learners to capture interactions and non-linear relationships among variables in the absence of a-priori information on the correct functional form. The selected learners are listed in Table \@ref(tab:learners). The SuperLearner algorithm was used to fit the learners and combine predictions in a `r length(demand_task_6$folds)` fold cross-validated manner.
+An ensemble machine learning pipeline was used to find the best prediction for each eye, using a diverse set of learners to capture interactions and non-linear relationships among variables in the absence of a-priori information on the correct functional form. The selected learners are listed in Table \@ref(tab:learners). The SuperLearner algorithm was used to fit the learners and combine predictions in a `r n_folds` fold cross-validated manner. Besides predictions for each eye, the SuperLearner returns the contribution of each learner (weighting) to the ensemble predictions across the entire task.
 
 ```{r learners}
 sl_learners %>% 
-  enframe(name = "NULL", value = "learner") %>% 
+  enframe(value = "pointer") %>% 
+  left_join(sl_variant_descriptions, by = "name") %>% 
+  select(-pointer) %>% 
   kbl(caption= "Learners included in ensemble (SuperLearner) fit.") %>% 
   kable_paper()
 ```
 
-The fluid measurements are listed in Table \@ref(tab:noa-selected) and prior to model fitting, missing measurements were imputed with zero.
+The fluid measurements are listed in Table \@ref(tab:noa-selected) and prior to model fitting, each variable was standardised and missing measurements were imputed with zero. Baseline and six month measurements for each variable were used 
 
 ```{r noa-selected}
 enframe(noa_volumes_selected, value = "Variable", name = NULL) %>% 
+  left_join(noa_dictionary, by = c("Variable" = "Raw Parameter")) %>% 
   kbl(caption = "Retinal fluid measurements included in models predicting injection demand.") %>% 
   kable_paper()
 ```
 
-## Model fit
 
-The relative contribution of each learner to the final prediction and the cross validated risk associated with each is given in Table \@ref(tab:cv-risk).
+# Total injections in first three years
 
-```{r cv-risk}
+The relative contribution of each learner to the final prediction and the cross validated risk associated with each is given in Table \@ref(tab:demand-cv-risk). The random forest `ranger_1000` made by far the largest contribution.
+
+```{r demand-cv-risk}
 sl_fit_6_cv_risk %>% 
-  kbl(caption = "Cross-validated risk for fitted learners.", digits = 2) %>% 
+  kbl(caption = "Cross-validated risk for fitted learners. MSE = Mean Squared Error", digits = 2) %>% 
+  kable_paper()
+```
+
+Discrimination of the model was good (Table \@ref(tab:demand-performance)). The correlation between the predicted and observed number of injections was high. Overall performance in terms of mean absolute deviation was reasonable. The deviation between model predictions and observed values is shown in tables \@ref(tab:demand-deviations) and \@ref(tab:demand-abs-deviations).
+
+
+```{r demand-performance}
+summarise_sl_fit(sl_preds_6) %>% 
+  kbl(caption = "Prediction characteristics of fitted model.", digits = 2) %>% 
   kable_paper()
 ```
 
 
-# Prediction results
-
-Discrimination of the model was good. The correlation between the predicted and observed number of injections was high (r = `r round(cor_sl_preds_6$estimate, 3)`, P = `r format.pval(cor_sl_preds_6$p.value, 3, eps = 0.001)`, Table \@ref(tab:confusion)). 
-
-Overall performance was reasonable with mean absolute deviation was `r round(mean(sl_preds_6$abs_deviation),2)`. The deviation between model predictions and observed values is shown in tables \@ref(tab:deviations) and \@ref(tab:abs-deviations).
-
-The total number of predicted injections was `r sum(sl_preds_6$pred_three_yr_injections)` and the observed number of injections was `r sum(sl_preds_6$three_yr_injections)`.
-
-```{r confusion}
-xtabs(data = sl_preds_6, ~three_yr_injections + pred_three_yr_injections) 
-```
-
-```{r deviations}
+```{r demand-deviations}
 sl_preds_6 %>% 
   tabyl(deviation) %>% 
   adorn_pct_formatting() %>% 
@@ -215,7 +226,7 @@ sl_preds_6 %>%
   kable_paper()
 ```
 
-```{r abs-deviations}
+```{r demand-abs-deviations}
 sl_preds_6 %>% 
   tabyl(abs_deviation) %>% 
   mutate(cumulative_n = cumsum(n), 
@@ -225,22 +236,197 @@ sl_preds_6 %>%
   kable_paper()
 ```
 
-In general, calibration of the model was best for those with 12 injections. Eyes where <12 injections were predicted tended to receive fewer than predicted. In contrast, eyes where >12 injections were predicted tended to receive more. The overall pattern is towards over-prediction at the lower end of the response curve and under-prediction at the upper end (calibration intercept = `r round(cal_6$coefficients[1], 2)`, slope = `r round(cal_6$coefficients[2], 2)`.
+In general, calibration of the model was best for those with 12 injections (Figure \@ref(fig:calibration-6)). Eyes where <12 injections were predicted tended to receive fewer than predicted. In contrast, eyes where >12 injections were predicted tended to receive more. The overall pattern is towards over-prediction at the lower end of the response curve and under-prediction at the upper end.
 
-```{r calibration-6, fig.cap="Predicted number of injections vs. number of injections received. Solid lines indicates calibration slopes (blue = fitted, black = perfect)."}
+```{r calibration-6, fig.cap="Predicted number of injections vs. number of injections received. Solid lines indicates calibration slopes (blue = fitted, black = perfect).", message=FALSE, warning=FALSE}
 sl_preds_6 %>% 
-  ggplot(aes(y = three_yr_injections, x = pred_three_yr_injections)) +
-  # geom_jitter(width = 0.3, aes(colour = Age)) +
+  # mutate(truncated = years_treated < 1) %>% 
+  ggplot(aes(y = Y, x = pred_Y)) +
   geom_jitter(width = 0.3) +
+  # geom_jitter(width = 0.3, aes(colour = truncated)) +
   geom_abline(aes(intercept = 0, slope =1)) +
   # Calibration slope
-   # geom_smooth(method = lm) +
+  geom_smooth(method = lm) +
   # Manually fitted
-  geom_abline(intercept = cal_6$coefficients[1], slope = cal_6$coefficients[2], colour = "blue")+
+  # geom_abline(intercept = cal_6$coefficients[1], slope = cal_6$coefficients[2], colour = "blue") +
+   scale_x_continuous(minor_breaks = function(lims){seq(0, round(lims[2]), by=1)}, limits = c(0, NA)) +
+   scale_y_continuous(minor_breaks = function(lims){seq(0, round(lims[2]), by=1)}, limits = c(0, NA)) +
   theme_light() +
   labs(x = "Injections at three years (predicted)",
        y = "Injections at three years (received)")
 ```
+
+
+# Injections by treatment year
+
+The random forest `ranger_1000` made by far the largest contribution for each year but the polynomial spline `polspline` and XGBoost `xgb_100` played minor roles, with contributions varying among years (Table \@ref(tab:demand-yr-cv-risk). Model performance was better in year 1 than in years 2 and 3 with lower Mean Squared Error (MSE).
+
+```{r demand-yr-cv-risk}
+sl_fit_yrs_6_cv_risk %>% 
+  bind_rows(.id = "outcome") %>% 
+  select(outcome, learner, coefficients, MSE) %>% 
+  pivot_wider(names_from = outcome, id_cols = learner, values_from = c(coefficients, MSE)) %>% 
+  kbl(caption = "Cross-validated risk for fitted learners. MSE = Mean Squared Error", digits = 2) %>% 
+  kable_paper()
+```
+
+Discrimination of all three models was good (Table \@ref(tab:demand-yr-performance))). The correlation between the predicted and observed number of injections was high. Overall performance in terms of mean absolute deviation was good, being slightly better in year 1 than in years 2 and 3. Almost all predictions were within two injections of the number received (Tables \@ref(tab:demand-yr-deviations) and \@ref(tab:demand-yr-abs-deviations)).
+
+```{r demand-yr-performance}
+sl_preds_yrs_6 %>% 
+  group_by(outcome) %>% 
+  group_modify(~summarise_sl_fit(.), .keep = TRUE) %>% 
+  kbl(caption = "Prediction characteristics of fitted models by year.", digits = 2) %>% 
+  kable_paper()
+```
+
+```{r demand-yr-deviations}
+sl_preds_yrs_6 %>% 
+  tabyl(deviation, outcome) %>% 
+  adorn_percentages("col") %>% 
+  adorn_pct_formatting() %>% 
+  adorn_ns() %>% 
+  kbl(caption = "Deviation between number of injections predicted and number of injections received by treatment year model.") %>% 
+  kable_paper()
+```
+
+```{r demand-yr-abs-deviations}
+sl_preds_yrs_6 %>% 
+  count(outcome, abs_deviation) %>% 
+  group_by(outcome) %>% 
+  mutate(cumulative = cumsum(n)/sum(n)) %>% 
+  pivot_wider(names_from = outcome, values_from = c(n, cumulative), values_fill = 0) %>% 
+   adorn_pct_formatting(... = matches("cumulative_in")) %>% 
+   adorn_percentages(denominator = "col", ... = matches("^n_in")) %>%
+  adorn_pct_formatting(... = matches("^n_in")) %>% 
+    adorn_ns(... = matches("^n_in")) %>%
+    kbl(caption = "Absolute deviation between number of injections predicted and number of injections received by treatment year model.") %>% 
+  kable_paper()
+```
+
+The same pattern towards over-prediction at the lower end of the response curve and under-prediction at the upper end was observed for each year, but was less evident in year two (Figure \@ref(fig:calibration-yr-6)). Eyes received a greater number of injections in year one than in subsequent years.
+
+```{r calibration-yr-6, fig.width = 7, fig.height = 9, fig.cap="Predicted number of injections vs. number of injections received by treatment year. Solid lines indicates calibration slopes (blue = fitted, black = perfect).", warning=FALSE, message =FALSE}
+sl_preds_yrs_6 %>% 
+  ggplot(aes(y = Y, x = pred_Y)) +
+  geom_jitter(width = 0.3) +
+  geom_abline(aes(intercept = 0, slope =1)) +
+  geom_smooth(method = lm) +
+   scale_x_continuous(breaks = function(lims){seq(0, round(lims[2]), by=5)}, minor_breaks = function(lims){seq(0, round(lims[2]), by=1)}, limits = c(0, NA)) +
+   scale_y_continuous(breaks = function(lims){seq(0, round(lims[2]), by=5)}, minor_breaks = function(lims){seq(0, round(lims[2]), by=1)}, limits = c(0, NA)) +
+  theme_light() +
+  labs(x = "Injections (predicted)",
+       y = "Injections (received)") +
+  facet_wrap(~outcome, ncol=1)
+```
+
+# Visual acuity by treatment year
+
+The random forest `ranger_1000` made by far the largest contribution for each year but the polynomial spline `polspline` and XGBoost `xgb_100` played minor roles, with contributions varying among years (Table \@ref(tab:va-yr-cv-risk). Model performance was slightly better in year 1 than in years 2 and 3 with lower Mean Squared Error (MSE).
+
+```{r va-yr-cv-risk}
+sl_fit_va_yrs_6_cv_risk %>% 
+  bind_rows(.id = "outcome") %>% 
+  select(outcome, learner, coefficients, MSE) %>% 
+  pivot_wider(names_from = outcome, id_cols = learner, values_from = c(coefficients, MSE)) %>% 
+  kbl(caption = "Cross-validated risk for fitted learners. MSE = Mean Squared Error", digits = 2) %>% 
+  kable_paper()
+```
+
+Discrimination of all three models was good (Table \@ref(tab:va-yr-performance))). The correlation between the predicted and observed number of injections was high. Overall performance in terms of mean absolute deviation was good, with mean deviations all < 0.2 on the logMAR scale, corresponding to less than two lines on the chart. There was a slight negative skew in the deviations for each year (Figure \@ref(fig:va-yr-deviations)). The majority of predictions were within 0.2 on the logMAR scale (two lines) of the observed visual acuity measurements (Table \@ref(tab:va-abs-deviations)). 
+
+```{r va-yr-performance}
+sl_preds_va_yrs_6 %>% 
+  group_by(outcome) %>% 
+  group_modify(~summarise_sl_fit(.), .keep = TRUE) %>% 
+  kbl(caption = "Prediction characteristics of fitted models by year.", digits = 2) %>% 
+  kable_paper()
+```
+
+```{r va-yr-deviations, fig.cap = "Deviations between predicted and observed visual acuity measures by treatment year."}
+sl_preds_va_yrs_6 %>% 
+  ggplot(aes(x = deviation)) +
+  geom_histogram(fill= "white", colour = "black", bins = 30) +
+  scale_x_continuous(minor_breaks = seq(-1, 1, 0.1)) +
+  theme_light() +
+  facet_wrap(~outcome, ncol = 1)
+```
+
+```{r va-abs-deviations}
+sl_preds_va_yrs_6 %>% 
+mutate(absolute_deviation = cut(abs_deviation, breaks =  seq(0, 1.5, 0.1))) %>% 
+  count(outcome, absolute_deviation) %>% 
+  group_by(outcome) %>% 
+  mutate(cumulative = cumsum(n)/sum(n)) %>% 
+  pivot_wider(names_from = outcome, values_from = c(n, cumulative), values_fill = 0) %>% 
+   adorn_pct_formatting(... = matches("cumulative_va")) %>% 
+   adorn_percentages(denominator = "col", ... = matches("^n_va")) %>%
+  adorn_pct_formatting(... = matches("^n_va")) %>% 
+    adorn_ns(... = matches("^n_va")) %>%
+    kbl(caption = "Absolute deviation between predicted and observed visual acuity by treatment year model.") %>% 
+  kable_paper()
+```
+
+The same pattern towards over-prediction at the lower end of the response curve and under-prediction at the upper end was observed for each year, but was less evident in year one (Figure \@ref(fig:calibration-va-yrs-6)). Translating from the logMAR scale this indicates that those predicted to have good visual acuity were likely to outperform the prediction, whereas those predicted to have poor visual acuity were likely to have worse vision than predicted.
+
+```{r calibration-va-yrs-6, fig.cap="Predicted vs. observed visual acuity at the end of each treatment year. Solid lines indicates calibration slopes (blue = fitted, black = perfect).", fig.width = 7, fig.height = 9, message=FALSE, warning=FALSE}
+sl_preds_va_yrs_6 %>% 
+  ggplot(aes(y = Y, x = pred_Y)) +
+  geom_point() +
+  geom_abline(aes(intercept = 0, slope =1)) +
+    geom_smooth(method = lm) +
+  theme_light() +
+  # scale_x_log10() +
+  # scale_y_log10() +
+  scale_x_continuous( minor_breaks = function(lims){seq(0, lims[2], by=0.1)}, limits = c(0, NA)) +
+  scale_y_continuous( minor_breaks = function(lims){seq(0, lims[2], by=0.1)}, limits = c(0, NA)) +
+  labs(x = "VA at end of treatment year (predicted)",
+       y = "VA at end of treatment year (observed)") +
+  facet_wrap(~outcome, ncol = 1)
+```
+
+
+# Treatment duration
+
+The relative contribution of each learner to the final prediction and the cross validated risk associated with each is given in Table \@ref(tab:treatment-cv-risk). The random forest `ranger_1000` made by far the largest contribution.
+
+```{r treatment-cv-risk}
+sl_fit_treatment_6_cv_risk %>% 
+  kbl(caption = "Cross-validated risk for fitted learners. MSE = Mean Squared Error", digits = 2) %>% 
+  kable_paper()
+```
+
+Discrimination of the model was good (Table \@ref(tab:treatment-performance))). The correlation between the predicted and observed number of injections was high. Overall performance in terms of mean absolute deviation was poor, at almost one year between the predicted and observed duration (Figure \@ref(fig:treatment-deviation)). 
+
+```{r treatment-performance}
+summarise_sl_fit(sl_preds_treatment_6) %>% 
+  kbl(caption = "Prediction characteristics of fitted model.", digits = 2) %>% 
+  kable_paper()
+```
+
+```{r treatment-deviation, fig.cap="Deviation between predicted and observed treatment durations."}
+sl_preds_treatment_6 %>% 
+  ggplot(aes(x = deviation)) +
+  geom_histogram(fill= "white", colour = "black", bins = 30) +
+  theme_light()
+```
+
+Calibration of the model was poor, tending to under-predict at the lower end and over-predict at the upper end (Figure \@ref(fig:treated-6)). The poor model performance is likely to be due in part to general purpose continuous prediction learners being applied to survival data, which has censored observations and other artefacts best modelled using more appropriate techniques (e.g. survival analysis). Therefore, this model is not considered appropriate.
+
+
+```{r treated-6, fig.cap="Predicted vs. observed treatment duration. Solid lines indicates calibration slopes (blue = fitted, black = perfect).", message=FALSE, warning=FALSE}
+sl_preds_treatment_6 %>% 
+  ggplot(aes(y = Y, x = pred_Y)) +
+  geom_jitter(width = 0.3) +
+  geom_abline(aes(intercept = 0, slope =1)) +
+  geom_smooth(method = lm) +
+   scale_x_continuous(minor_breaks = function(lims){seq(0, round(lims[2]), by=1)}, limits = c(0, NA)) +
+   scale_y_continuous(minor_breaks = function(lims){seq(0, round(lims[2]), by=1)}, limits = c(0, NA)) +
+  theme_light() +
+  labs(x = "Treatment duration in years (predicted)",
+       y = "Treatment duration in years (received)")
+```
+
 
 # Interpretable machine learning
 
@@ -256,6 +442,6 @@ autoplot(sl_shap_all, type = "dependence", feature = "SRFVolumeNl_6", X = demand
 autoplot(sl_shap_all, type = "contribution", feature = "SRFVolumeNl_6", X = demand_task_6$data[1,], alpha=0.3) +
   theme_light()
 ```
-```{r force-plot}
-# force_plot(object = sl_shap_all[1L, ], feature_values = demand_task_6$data[1,], display = "html")  
+```{r force-plot, message = F}
+ force_plot(object = sl_shap_all[1L, ], feature_values = select(demand_task_6$data, -three_yr_injections)[1,], display = "html")  
 ```

@@ -1,4 +1,6 @@
 # BIRAX - predicting number of injections required
+
+# Setup environment for superlearner
 library(rprojroot)
 library(tidyverse)
 library(janitor)
@@ -15,15 +17,16 @@ library(caret)
 library(Rsolnp)
 library(fastshap)
 library(tictoc)
-
+library(broom)
 
 # Increase java memory limit before calling bartMachine
 # options(java.parameters = "-Xmx30g") # 30Gb
-# library(bartMachine)
+options(java.parameters = "-Xmx1g") # 1Gb
+library(bartMachine)
 
+# Call python environment with SHAP package for force plots of SHAP values
 library(reticulate)
 use_condaenv("shap")
-
 
 conflict_prefer("Stack", "sl3")
 conflict_prefer("importance", "sl3")
@@ -60,22 +63,31 @@ eye_demand_raw <- eye %>%
 eye_demand_raw %>% 
   count(across(matches("exclude")))
 
-# eye_demand <- eye %>% 
-#   inner_join(three_yr_eyes, by = c("PatientID", "EyeCode")) %>% 
-#   inner_join(fluid_eyes, by = c("PatientID", "EyeCode"))
-
 eye_demand <- eye_demand_raw %>% 
-  filter(!exclude_three_yrs_observed, !exclude_fluid_eyes, !exclude_6months_fluid)
+  filter(
+    # Relax the three year requirement?
+     !exclude_three_yrs_observed, 
+         !exclude_fluid_eyes, 
+         !exclude_6months_fluid)
 
-# Outcome - number of injections at 3 years
-three_years_n_injections <- injections %>% 
-  filter(years_treated <= 3) %>% 
-  count(PatientID, EyeCode, name = "three_yr_injections")
+# Outcomes - 
+# Numbers of injections by treatment year
+injections_yr <- injections %>% 
+  count(PatientID, EyeCode, treatment_year) %>% 
+  pivot_wider(names_from = treatment_year, values_from = n, names_prefix = "in_yr_", values_fill = 0) %>% 
+# number of injections at 3 years
+  mutate(three_yr_injections = in_yr_1 + in_yr_2 + in_yr_3)
 
+# three_years_n_injections <- injections %>%
+#   filter(years_treated <= 3) %>%
+#   count(PatientID, EyeCode, name = "three_yr_injections")
+
+  
 # Baseline fluid measurements with outcome added
 fluid_baseline_imp_demand <- fluid_baseline_imp %>% 
   inner_join(eye_demand, by = c("PatientID", "EyeCode")) %>% 
-  inner_join(three_years_n_injections, by = c("PatientID", "EyeCode"))
+  # inner_join(three_years_n_injections, by = c("PatientID", "EyeCode"))
+  inner_join(injections_yr, by = c("PatientID", "EyeCode"))
 
 fluid_baseline_imp_demand %>% 
   mutate(across(three_yr_injections, as.factor)) %>% 
@@ -87,8 +99,8 @@ fluid_baseline_imp_demand %>%
 # Baseline and 6 month fluid measurements with outcome added
 fluid_6months_imp_demand <- fluid_6months_imp %>% 
   inner_join(eye_demand, by = c("PatientID", "EyeCode")) %>% 
-  inner_join(three_years_n_injections, by = c("PatientID", "EyeCode"))
-
+  # inner_join(three_years_n_injections, by = c("PatientID", "EyeCode"))
+  inner_join(injections_yr, by = c("PatientID", "EyeCode"))
 
 # ROC performance of IRF volume alone
 # pROC::multiclass.roc(response = fluid_baseline_imp_demand$three_yr_injections, predictor = fluid_baseline_imp_demand$IRFVolumeNl) 
@@ -115,55 +127,46 @@ thickness_history_demand <- thickness_history %>%
   filter(months_since_index <= 36)
 
 
-# injections_history_demand <- injections %>% 
-#   filter(months_since_index <= 36)
+
+# Find last VA recorded for each treatment year
+va_yr <- va_history_demand[va_history_demand[,.I[years_since_index == max(years_since_index)], by=.(PatientID, EyeCode, treatment_year)]$V1][
+  treatment_year != 0, .(PatientID, EyeCode, treatment_year, va_logmar)] %>% 
+  pivot_wider(names_from = treatment_year, values_from = va_logmar, names_prefix = "va_logmar_yr_")
+
+fluid_6months_imp_demand_va_yr1 <- fluid_6months_imp_demand %>% 
+  inner_join(va_yr %>% 
+               select(PatientID, EyeCode, va_logmar_yr_1) %>% 
+               filter(!is.na(va_logmar_yr_1)), by = c("PatientID", "EyeCode"))
+
+fluid_6months_imp_demand_va_yr2 <- fluid_6months_imp_demand %>% 
+  inner_join(va_yr %>% 
+               select(PatientID, EyeCode, va_logmar_yr_2) %>% 
+               filter(!is.na(va_logmar_yr_2)), by = c("PatientID", "EyeCode"))
+
+fluid_6months_imp_demand_va_yr3 <- fluid_6months_imp_demand %>% 
+  inner_join(va_yr %>% 
+               select(PatientID, EyeCode, va_logmar_yr_3) %>% 
+               filter(!is.na(va_logmar_yr_3)), by = c("PatientID", "EyeCode"))
+
+fluid_6months_imp_demand_va_yrs <- list(fluid_6months_imp_demand_va_yr1, fluid_6months_imp_demand_va_yr2, fluid_6months_imp_demand_va_yr3)
+
+# va_history %>% 
+#   filter(PatientID == "0159B375-C58B-B305-D2D3-BBF28C638000", EyeCode == "L")
 
 
-## Superlearner models ##
-
-# Create sl3 task
-# Note imputation of missing values (median for continuous, mode for categorical) is
-# performed in task setup if is has not been done already
-demand_task <- make_sl3_Task(
-  data = fluid_baseline_imp_demand,
-  covariates = noa_volumes_selected,
-  outcome = "three_yr_injections",
-  outcome_type = "continuous",
-  id = "PatientID",
-  folds = 5
-)
+# Fluid measurements to include as predictors in superlearner models
+# Baseline and six month
+noa_covariates_0_6 <- paste(noa_volumes_selected, rep(c(0, 6), each = length(noa_volumes_selected)), sep = "_")
 
 
-demand_task_6 <- make_sl3_Task(
-  data = fluid_6months_imp_demand,
-  covariates = paste(noa_volumes_selected, rep(c(0, 6), each = length(noa_volumes_selected)), sep = "_"),
-  outcome = "three_yr_injections",
-  outcome_type = "continuous",
-  id = "PatientID",
-  folds = 5
-)
-# 
-# cluster_task <- make_sl3_Task(
-#   data = fluid_6_12_imp,
-#   covariates = paste(noa_volumes_selected, rep(c(0, 6, 12), each = length(noa_volumes_selected)), sep = "_"),
-#   outcome = "cluster",
-#   outcome_type = "categorical",
-#   folds = 5
-# )
-
-
-
+## Define SuperLearner algorithm for predicting continuous variables
 
 # Learners that can work for this task
 sl3_list_learners("continuous") %>% enframe() %>% data.frame()
-# sl_learner_descriptions <- read_csv(find_rstudio_root_file("Machine learning", "sl3_learner_descriptions.csv"))
-# sl_variant_descriptions <- read_csv(find_rstudio_root_file("Machine learning", "sl3_variant_descriptions.csv"))
+sl_learner_descriptions <- read_csv(find_rstudio_root_file("data-dictionary", "sl3_learner_descriptions.csv"))
+sl_variant_descriptions <- read_csv(find_rstudio_root_file("data-dictionary", "sl3_variant_descriptions.csv"))
 
-# Note that glm does not support multinomial outcome so cannot be used in its raw form
-# Can use this method instead
-# multinom_gf = make_learner(Lrnr_independent_binomial, make_learner(Lrnr_glm_fast)),
-
-# Choose base learners (instantiate with R6 method $new())
+# Base learners (instantiate with R6 method $new())
 lrn_mean <- Lrnr_mean$new()
 lrn_glm <- Lrnr_glm$new()
 lrn_lasso <- Lrnr_glmnet$new()
@@ -173,14 +176,9 @@ lrn_ranger1000 <- Lrnr_ranger$new(num.trees = 1000)
 lrn_xgb_fast <- Lrnr_xgboost$new()
 lrn_xgb100 <- Lrnr_xgboost$new(nrounds = 100)
 lrn_nnet <- Lrnr_nnet$new()
-lrn_bartMachine <- Lrnr_bartMachine$new(serialize =TRUE)
-lrn_hal9001 <- Lrnr_hal9001$new()
-# Caret functions do not work
-# lrn_caret_nnet <- Lrnr_caret$new(algorithm = "nnet")
-# lrn_caret_bartMachine <- Lrnr_caret$new(algorithm = "bartMachine", method = "boot",  tuneLength = 10)
 lrn_nnet_autotune <- Lrnr_caret$new(algorithm = "nnet", name = "NNET_autotune")
-
-# For multinomial predictions are class probabilities
+lrn_bartMachine <- Lrnr_bartMachine$new(serialize =TRUE) # Must serialise to save trained models
+lrn_hal9001 <- Lrnr_hal9001$new()
 
 # Stack the learners so they are fitted simultaneously
 learners <- c(lrn_mean, 
@@ -192,13 +190,10 @@ learners <- c(lrn_mean,
               lrn_xgb_fast, 
               lrn_xgb100,
               lrn_nnet,
-              # lrn_bartMachine,
-               # lrn_hal9001
-              # lrn_caret_nnet,
-              # lrn_caret_bartMachine
-              lrn_nnet_autotune
-)
-
+              lrn_nnet_autotune,
+              lrn_bartMachine,
+              lrn_hal9001
+) 
 names(learners) <- c("mean", 
                      "glm",
                      "lasso", 
@@ -208,140 +203,56 @@ names(learners) <- c("mean",
                      "xgb_fast", 
                      "xgb_100",
                      "nnet",
-                     # "bartMachine",
-                     # "hal9001"
-                     # "caret_nnet",
-                     # "caret_bartMachine"
-                     "caret_nnet_autotune"
+                     "caret_nnet_autotune",
+                     "bartMachine",
+                     "hal9001"
 )
 
 
-
-# sl_learners <- learners[c(1:3, 5:7)]
-sl_learners <- learners
-
+sl_learners <- learners[c(1:8, 10)]
 sl_learners %>% 
   enframe() %>% 
   transmute(Algorithm = name)
- 
-# Make the Super Learner 
 
-# Learner stack should be trained on the full data (no cross validation)
 # Stack the learners
-# stack <- make_learner_stack(sl_learners)
 stack <- Stack$new(sl_learners)
 
-
-# # New syntax for stacking learners
-# stack <- Stack$new(
-#   "Lrnr_mean", 
-#   "Lrnr_glmnet",
-#   list("Lrnr_glmnet", 
-#        alpha = 0),
-#   list("Lrnr_ranger",
-#        num.trees = 100),
-#   "Lrnr_xgboost",
-#   list("Lrnr_xgboost", 
-#        nrounds = 50)
-# )
-
-
-# Meta learner should be trained on the cross validated predictions
-# Use default metalearner (solnp)
+# Make the Super Learner using default meta-learner (solnp)
+# Ensures meta learner is trained on the cross validated predictions
 sl <- Lrnr_sl$new(stack)
 
-#  Train the superlearner
-# 2 hrs
-# tictoc::tic()
-# sl_fit <- sl$train(demand_task)
-# tictoc::toc()
+# Number of folds to use for superlearner cross-validation
+n_folds <- 5
 
-# 4 hrs
-tictoc::tic()
-sl_fit_6 <- sl$train(demand_task_6)
-tictoc::toc()
-
-
-# sl_fit_cv_risk <- sl_fit$cv_risk()
-sl_fit_6_cv_risk <- sl_fit_6$cv_risk(eval_fun = loss_squared_error)
-
-# save(sl_fit, file = find_rstudio_root_file("workspaces/sl-fit.RData"))
-# save(sl_fit_6, file = find_rstudio_root_file("workspaces/sl-fit-6.RData"))
-
-# # Extract predictions 
-# # Note that fractional numbers of injections can be predicted so round to nearest integer
-# sl_preds <- tibble(demand_task$data,
-#   pred_three_yr_injections = round(sl_fit$predict()))
-# 
-# # Strong positive association between predicted and true values
-# cor.test(sl_preds$three_yr_injections, sl_preds$pred_three_yr_injections)
-# summary(lm(three_yr_injections~pred_three_yr_injections, data = sl_preds))
-# xtabs(data = sl_preds, ~pred_three_yr_injections+ three_yr_injections)
-
-
-# Extract predictions 
-# Note that fractional numbers of injections can be predicted so round to nearest integer
-sl_preds_6 <- tibble(demand_task_6$data,
-                   pred_three_yr_injections = round(sl_fit_6$predict()),
-                   deviation = three_yr_injections - pred_three_yr_injections,
-                   abs_deviation = abs(deviation)) %>% 
-  bind_cols(eye_demand %>% 
-              select(-PatientID)) %>% 
-  mutate(
-                   # Positional matching to original data
-                year_start = as.factor(data.table::year(index_date)))
+# Extract predictions from superlearner fit and add eye code as another identifier
+# Args:
+# sl_task = sl3 task 
+# sl_fit = trained sl3 model
+# sl_dat = data input to sl3 task but also containing eye code
+# eye_chars = data.table of additional eye characteristics (keys: PatientID, EyeCode)
+# round = logical indicating whether to round the predictions before calculating the deviations (e.g. for integer predictions)
+extract_sl_continuous <- function(sl_task, sl_fit, sl_dat, eye_chars, round = FALSE) {
   
-
-tabyl(sl_preds_6, three_yr_injections, pred_three_yr_injections)
-
-# Strong positive association between predicted and true values
-cor_sl_preds_6 <- cor.test(sl_preds_6$three_yr_injections, sl_preds_6$pred_three_yr_injections)
-
-# Calibration slope
-cal_6 <- lm(three_yr_injections~pred_three_yr_injections, data = sl_preds_6)
-summary(cal_6)
-
-
-# save(sl_preds, file = find_rstudio_root_file("workspaces/sl-preds.RData"))
-# save(sl_preds_6, file = find_rstudio_root_file("workspaces/sl-preds-6.RData"))
-
-
-## Interpretability
-
-## Setup prediction wrapper that will be called by explain()
-# This produces a prediction for each of the Frankenstein matrices constructed by fastSHAP
-# Can have only two arguments, object and newdata
-demand_6_prediction_wrapper <- function(object, newdata){
-  sl_wrap <- make_sl3_Task(
-    data = cbind(three_yr_injections = NA, newdata),
-    covariates = paste(noa_volumes_selected, rep(c(0, 6), each = length(noa_volumes_selected)), sep = "_"),
-    outcome = "three_yr_injections",
-    outcome_type = "continuous",
-    id = "PatientID",
-    folds = 5
-  )
-  # Predict number of injections
-  learner_fit_predict(object, task = sl_wrap) 
+  preds_Y <- if(round){
+    round(sl_fit$predict())
+  } else {
+    sl_fit$predict()
+  }
+    
+  tibble(
+    sl_task$data,
+    Y = sl_task$Y,
+    pred_Y = preds_Y,
+    # Calculate deviations between prediction and observed value
+    deviation = Y - pred_Y,
+    abs_deviation = abs(deviation)
+  ) %>%
+    # Positional matching to original data to add secondary ID (EyeCode)
+    bind_cols(sl_dat %>%
+                select(EyeCode)) %>%
+    # Additional characteristics
+    inner_join(eye_chars, by = c("PatientID", "EyeCode")) %>%
+    mutate(year_start = as.factor(data.table::year(index_date)))
 }
-# Test the prediction wrapper
-# demand_prediction_wrapper(sl_fit_6, fluid_6months_imp_demand[, c("PatientID", paste(noa_volumes_selected, rep(c(0, 6), each = length(noa_volumes_selected)), sep = "_")), with =FALSE])
 
-# Calculate SHAP values
-# 30 mins for 10 simulations
-tic()
-sl_shap_all <-
-  explain(
-    sl_fit_6,
-    # The input matrix must be the dataset that is input to the sl3 task
-    # rather than the one output by the task where imputation has been automatically carried out by sl3
-    # Using the output from the sl3 task leads to predictions not matching fitted values and failure of local additivity of SHAP values
-    #  X = as.data.frame(sl_dat[, sl_selected]),
-    # X = as.data.frame(fluid_6months_imp_demand,[, sl_selected]),
-    X = as.data.frame(fluid_6months_imp_demand[, c("PatientID", paste(noa_volumes_selected, rep(c(0, 6), each = length(noa_volumes_selected)), sep = "_")), with =FALSE]),
-    # X = imp,
-    pred_wrapper = demand_6_prediction_wrapper,
-    nsim = 10,
-    adjust = TRUE
-  ) 
-toc()
 
