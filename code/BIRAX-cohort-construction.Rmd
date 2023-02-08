@@ -409,6 +409,7 @@ fluid_history %>%
 
 ```
 
+
 ```{r fluid-baseline-by-gender, warning=FALSE}
 fluid_history %>% 
   filter(baseline) %>% 
