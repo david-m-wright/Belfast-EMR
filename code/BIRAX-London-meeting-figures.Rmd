@@ -1,0 +1,70 @@
+---
+title: "BIRAX study - Figures for Macula Society conference presentation"
+author: "David M Wright - d.wright@qub.ac.uk"
+date: "Document compiled: `r Sys.Date()`"
+output: 
+  bookdown::html_document2:
+  toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(knitr)
+library(kableExtra)
+library(rprojroot)
+library(tidyverse)
+library(broom)
+```
+
+`r R.version.string`   
+
+
+```{r run-analysis, include=FALSE}
+source(find_rstudio_root_file("Code/BIRAX-assemble-cohort.R"))
+```
+
+
+```{r treatment-series, fig.cap="Sample patient histories. Dotted lines indicate injection dates.", fig.width=9, fig.height=7, warning = FALSE}
+
+plot_pt_history <- function(ptid){
+  
+bind_rows(
+  filter(fluid_history, PatientID == ptid[1], EyeCode == ptid[2]) %>% 
+    pivot_longer(cols = c(SRFVolumeNl, IRFVolumeNl), names_to = "Variable") %>% 
+  transmute(treatment_months, name = "Fluid", Variable, value)
+,
+  filter(va_history, PatientID == ptid[1], EyeCode == ptid[2]) %>% 
+  transmute(treatment_months, value = va_etdrs, name = "Visual Acuity", Variable = "ETDRS Letters")
+) %>% 
+    filter(treatment_months <= 36) %>% 
+  
+  ggplot(aes(x = treatment_months, y = value)) +
+  geom_line(aes(colour = Variable), linewidth = 1) +
+  facet_wrap(~name, ncol = 1, scales = "free_y") +
+  
+  geom_vline(xintercept = treatment_intervals %>% 
+  filter(PatientID == ptid[1], EyeCode == ptid[2]) %>% pull(treatment_months),
+  lty = 2) +
+    scale_x_continuous(breaks = NULL, minor_breaks = NULL, limits = c(0,36) ) +
+  theme_light() +
+  theme(axis.text = element_text(size = 14), 
+        axis.title = element_text(size = 14), 
+        legend.text = element_text(size = 14),
+        strip.text = element_text(size = 14))  +
+  labs(y = NULL, x = "Treatment Month", colour = NULL, title = ptid) 
+    
+    
+  
+}
+# plot_pt_history(unlist(select(slice_sample(eye, n= 1), PatientID, EyeCode)))
+
+# Poor response
+plot_pt_history(c("1DFDAC5A-0C94-33CE-098A-5BAE47F5EF9C", "L"))
+
+# Good response
+plot_pt_history(c("3A0AB188-54CE-B684-CB9E-FB33272869AB", "R"))
+```
+
+
+
+

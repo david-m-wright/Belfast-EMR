@@ -1,7 +1,7 @@
 # Superlearner models to predict injection demand at 3 years
 
 source(rprojroot::find_rstudio_root_file("code/BIRAX-injection-demand.R"))
-
+set.seed(1983)
 
 # Create sl3 task
 # Note imputation of missing values (median for continuous, mode for categorical) is

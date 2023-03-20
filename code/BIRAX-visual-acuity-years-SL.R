@@ -1,6 +1,7 @@
 # Superlearner models to predict visual acuity at end of each treatment year
 
 source(rprojroot::find_rstudio_root_file("code/BIRAX-injection-demand.R"))
+set.seed(1983)
 
 # Define tasks
 # These operate on different sized source datasets as some eyes had no VA measurements in years 2 and 3

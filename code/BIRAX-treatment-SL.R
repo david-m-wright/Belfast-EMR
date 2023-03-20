@@ -1,6 +1,7 @@
 # Superlearner models to predict treatment duration
 
 source(rprojroot::find_rstudio_root_file("code/BIRAX-injection-demand.R"))
+set.seed(1983)
 
 # Define task
 treatment_task_6 <- make_sl3_Task(

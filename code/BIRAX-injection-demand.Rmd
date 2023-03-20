@@ -22,7 +22,7 @@ library(janitor)
 ```{r run-analysis, include=FALSE}
 source(find_rstudio_root_file("Code/BIRAX-injection-demand.R"))
 source(find_rstudio_root_file("Code/BIRAX-injection-demand-SL.R"))
-source(find_rstudio_root_file("Code/BIRAX-injection-demand- years-SL.R"))
+source(find_rstudio_root_file("Code/BIRAX-injection-demand-years-SL.R"))
 source(find_rstudio_root_file("Code/BIRAX-visual-acuity-years-SL.R"))
 source(find_rstudio_root_file("Code/BIRAX-treatment-SL.R"))
 ```

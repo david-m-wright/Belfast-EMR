@@ -1,6 +1,7 @@
 # Superlearner models to predict injection demand by treatment year
 
 source(rprojroot::find_rstudio_root_file("code/BIRAX-injection-demand.R"))
+set.seed(1983)
 
 ## Superlearner models ##
 
