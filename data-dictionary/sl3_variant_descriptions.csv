@@ -1,0 +1,12 @@
+﻿name,Variant
+mean,Intercept only model
+lasso,LASSO
+ridge,Ridge regression
+polspline,Polynomial splines
+ranger_1000,Random forest
+xgb_fast,XGBoost - 20 iterations
+xgb_100,XGBoost - 100 iterations
+nnet,Neural network
+bartMachine,Bayesian Additive Regression Trees
+glm,Generalised linear model
+caret_nnet_autotune,Neural network - autotuned

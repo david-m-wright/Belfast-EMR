@@ -246,3 +246,4 @@ injections_clean <- injections_raw %>%
 
 oct_thickness <- fread(file.path(file_path, "OCT_ThicknessMetricsDistinct.csv"))
 
+# oct_details <- fread(file = file.path(file_path, "OCT_ImageVariables.txt"))

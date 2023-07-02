@@ -1,0 +1,47 @@
+Learner,Categorical,Continuous,Description
+Lrnr_arima,FALSE,TRUE,Autoregressive integrated moving average model for univariate time-series.
+Lrnr_bartMachine,TRUE,TRUE,Bayesian Additive Regression Trees.
+Lrnr_bilstm,FALSE,TRUE,Bidirectional Long short-term memory Recurrent Neural Network (LSTM).
+Lrnr_bound,TRUE,TRUE,Bounds predictions - for use in pipelines.
+Lrnr_caret,TRUE,TRUE,Wrapper for algorithms in the CARET library.
+Lrnr_cv_selector,TRUE,TRUE,Meta-learner identifies the cross-validated selector (i.e. discrete super learner) for any loss function.
+Lrnr_dbarts,TRUE,TRUE,Discrete Bayesian Additive Regression Tree sampler.
+Lrnr_earth,FALSE,TRUE,Earth - multivariate adaptive regression splines
+Lrnr_expSmooth,FALSE,TRUE,Exponential Smoothing.
+Lrnr_gam,TRUE,TRUE,Generalised Additive Models.
+Lrnr_gbm,FALSE,TRUE,GBM - generalized boosted regression models.
+Lrnr_glm,FALSE,TRUE,Generalized Linear Models.
+Lrnr_glm_fast,FALSE,TRUE,Computationally Efficient GLMs.
+Lrnr_glmnet,TRUE,TRUE,GLMs with Elastic Net Regularization.
+Lrnr_grf,TRUE,TRUE,Generalized Random Forests Learner.
+Lrnr_gru_keras,FALSE,TRUE,Recurrent Neural Network with Gated Recurrent Unit (GRU) with Keras.
+Lrnr_gts,FALSE,TRUE,Grouped Time-Series Forecasting.
+Lrnr_h2o_glm,TRUE,TRUE, Faster fitting procedures for generalized linear models.
+Lrnr_h2o_grid,TRUE,TRUE,Various types of models with support for grid search over the hyperparameter space of such models.
+Lrnr_hal9001,FALSE,TRUE,The Scalable Highly Adaptive Lasso (covariates and interactions).
+Lrnr_HarmonicReg,FALSE,TRUE,Harmonic Regression.
+Lrnr_hts,FALSE,TRUE,Hierarchical Time-Series Forecasting.
+Lrnr_independent_binomial,TRUE,FALSE,Classification from Binomial Regression. Allows logisitic type models to be fit to multinomial outcomes.
+Lrnr_lstm,FALSE,TRUE,Long short-term memory Recurrent Neural Network (LSTM).
+Lrnr_lstm_keras,FALSE,TRUE,Long short-term memory Recurrent Neural Network (LSTM) with Keras.
+Lrnr_mean,TRUE,TRUE,Fitting Intercept Models.
+Lrnr_multiple_ts,FALSE,TRUE,Stratify univariable time-series learners by time-series.
+Lrnr_multivariate,TRUE,FALSE,Multivariate Learner.
+Lrnr_nnet,TRUE,TRUE,Feed-Forward Neural Networks and Multinomial Log-Linear Models.
+Lrnr_nnls,FALSE,TRUE,Non-negative Linear Least Squares.
+Lrnr_optim,TRUE,TRUE,ptimize Metalearner according to Loss Function using optim.
+Lrnr_pkg_SuperLearner,FALSE,TRUE,"Use SuperLearner Wrappers, Screeners, and Methods, in sl3."
+Lrnr_pkg_SuperLearner_method,FALSE,TRUE,"Use SuperLearner Wrappers, Screeners, and Methods, in sl3."
+Lrnr_pkg_SuperLearner_screener,FALSE,TRUE,"Use SuperLearner Wrappers, Screeners, and Methods, in sl3."
+Lrnr_polspline,TRUE,TRUE,Multivariate adaptive polynomial spline regression and polychotomous regression and multiple classification.
+Lrnr_pooled_hazards,TRUE,FALSE,Classification from Pooled Hazards.
+Lrnr_randomForest,TRUE,TRUE,Random Forests.
+Lrnr_ranger,TRUE,TRUE,Ranger - A Fast Implementation of Random Forests.
+Lrnr_rpart,TRUE,TRUE,Recursive Partitioning and Regression Trees.
+Lrnr_rugarch,FALSE,TRUE, Generalized autoregressive conditional heteroskedasticity models for univariate time-series.
+Lrnr_screener_correlation,TRUE,TRUE,Correlation Screening Procedures.
+Lrnr_solnp,TRUE,TRUE,Nonlinear Optimization via Augmented Lagrange.
+Lrnr_stratified,FALSE,TRUE,Stratify learner fits by a single variable.
+Lrnr_svm,TRUE,TRUE,Support Vector Machines.
+Lrnr_tsDyn,FALSE,TRUE,Nonlinear Time Series Analysis.
+Lrnr_xgboost,TRUE,TRUE,xgboost: eXtreme Gradient Boosting.

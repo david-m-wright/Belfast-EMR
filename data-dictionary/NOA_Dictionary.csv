@@ -1,0 +1,135 @@
+﻿Parameter ,Raw Parameter,Unit/Type,Category ,Description
+File Name,FileName,.avi/DICOM,General,Serves as the ID for the scan 
+Analysis eligibility,Analysis eligibility,BINARY,General,"0 - Ineligible for analysis 
+1- Eligible for analysis "
+Number of Bscans,FramesNum,INT,General,Total number of Bscans 
+Number of Bscans with Fluid,NumBscanwtihFluid,INT,General,Total number of Bscans with fluid
+SRF,SRF,BINARY,Fluid Parameters,"0 - Absence of Sub Retinal Fluid
+1 -Presence of Sub Retinal Fluid"
+IRF,IRF,BINARY,Fluid Parameters,"0 - Absence of Intra Retinal Fluid 
+1 - Presence of Intra Retinal Fluid "
+Fluid,Fluid,BINARY,Fluid Parameters,"0 - Absence of Fluid 
+1 - Presence of Fluid "
+SRF Volume,SRFVolumeNl,[nl],Fluid Parameters,Sum of the area of SRF regions multiplied by the distance between B-scans within the analyzed en-face area
+IRF Volume,IRFVolumeNl,[nl],Fluid Parameters,Sum of the area of IRF regions multiplied by the distance between B-scans within the analyzed en-face area
+TRF Volume,TRFVolumeNl,[nl],Fluid Parameters,Sum of the area of fluid regions multiplied by the distance between B-scans within the analyzed en-face area
+Average IRF height,Average_IRF_height[um],[um],Fluid Parameters,The average of the IRF fluid thickness within the analyzed en-face area
+Average SRF height,Average_SRF_height[um],[um],Fluid Parameters,The average of the SRF fluid thickness within the analyzed en-face area
+Average TRF height,Average_TRF_height[um],[um],Fluid Parameters,Sum of the average IRF height and the average SRF height
+Max IRF height ,MaxIRF_height[um],[um],Fluid Parameters,The max of the IRF fluid thickness within the analyzed en-face area
+Max SRF height ,MaxSRF_height[um],[um],Fluid Parameters,The max of the SRF fluid thickness within the analyzed en-face area
+B-scan with 1st largest area of fluid,Bscan_1st_highest_fluid[nl],INT,Fluid Parameters,"The index number of the B-scan with the  highest total fluid area
+-1000 - B-scan is not available  "
+B-scan with 2nd largest area of fluid,Bscan_2nd_highest_fluid[nl],INT,Fluid Parameters,"The index number of the B-scan with the second highest total fluid area
+-1000 - B-scan is not available"
+B-scan with 3rd largest area of fluid,Bscan_3rd_highest_fluid[nl],INT,Fluid Parameters,"The index number of the B-scan with the third highest total fluid area
+-1000 - B-scan is not available"
+Analyzed en-face area,AnalyzedEnfaceArea[mm^2],[mm^2],Retinal parameters,The net area analyzed by the algorithm 
+Retinal volume,Retinal_volumeNl,[nl],Retinal parameters,The volume of the retina within the analyzed en-face area based on ILM to RPE delineation
+Average retinal height,Average_Retinal_height[um],[um],Retinal parameters,Retinal volume divided by the analyzed en-face area
+Vitrous-Macula Interface (VMI) abnormalities,ERM,BINARY,Retinal parameters,"Presence of hyporeflective regions that interface with the ILM which  are not classified as IRF  
+0 - Absent 
+1 - Present"
+Vitrous-Macula Interface (VMI) abnormalities,ERMVolumeNl,[nl],Retinal parameters,Volume of hyporeflective regions that interface with the ILM which  are not classified as IRF  
+RPE irregularities,RPE_irregularities,BINARY,Retinal parameters,"0 - Absence of drusen or PED
+1 - Presence of drusen of PED"
+Retinal pigment epithelial detachment (PED),PED,BINARY,Retinal parameters,"0 - Absence of PED 
+1 - Presence of PED "
+Volume of retinal pigment epithelial detachment (PED),PED volume[nl],[nl],Retinal parameters,Volume of retinal pigment epithelial detachment within the analyzed en-face area
+Volume of RPE irregularities,Volume_of_RPE_irregularities[nl],[nl],Retinal parameters,"Including drusen and PED, multiplied by the distance between B-scans within the analyzed en-face area"
+Maximal height of RPE irregularities,Maximal_height_of_RPE_irregularities[um],[um],Retinal parameters,Including PED
+Average RPE irregularities height ,Average_RPE_irregularities_height[um],[um],Retinal parameters,Dividing the volume of RPE irregularities by the analyzed en-face area
+Section with highest RPE irregularity (max height),Section_with_highest_RPE_irregularity(max_height),INT,Retinal parameters,"The index number of the B-scan with the highest PED or drusen
+-1000 - B-scan is not available"
+Section with the most evidence for RPE irregularities,Section_with_most_evidence_for_RPE_irregularities,INT,Retinal parameters,"The index number of the B scan with the highest classification score for RPE irregularities 
+-1000 -  B-scan is not available"
+RPE irregularities CST ,CST(RPE)[um],[um],ETDRS Grid Parameters,RPE irregularities thickness within the ETDRS fields (see macular map below)
+RPE irregularities CST volume,CSV(RPE)[nl],[nl],ETDRS Grid Parameters,RPE irregularities volume within the ETDRS fields (see macular map below)
+RPE irregularities superior3 (Inner Superior),Superior3(RPE)[um],[um],ETDRS Grid Parameters,RPE irregularities thickness within the ETDRS fields (see macular map below)
+RPE irregularities superior3 volume (Inner Superior),Superior3_vol(RPE)[nl],[nl],ETDRS Grid Parameters,RPE irregularities volume within the ETDRS fields (see macular map below)
+RPE irregularities Nasal3 (Inner Nasal),Nasal3(RPE)[um],[um],ETDRS Grid Parameters,RPE irregularities thickness within the ETDRS fields (see macular map below)
+RPE irregularities Nasal3 volume (Inner Nasal),Nasal3_vol(RPE)[nl],[nl],ETDRS Grid Parameters,RPE irregularities volume within the ETDRS fields (see macular map below)
+RPE irregularities inferior3 (Inner inferior),Inferior3(RPE)[um],[um],ETDRS Grid Parameters,RPE irregularities thickness within the ETDRS fields (see macular map below)
+RPE irregularities inferior3 volume (Inner inferior),Inferior3_vol(RPE)[nl],[nl],ETDRS Grid Parameters,RPE irregularities volume within the ETDRS fields (see macular map below)
+RPE irregularities Tempo3 (Inner Temporal),Tempo3(RPE)[um],[um],ETDRS Grid Parameters,RPE irregularities thickness within the ETDRS fields (see macular map below)
+RPE irregularities Tempo3 volume (Inner Temporal),Tempo3_vol(RPE)[nl],[nl],ETDRS Grid Parameters,RPE irregularities volume within the ETDRS fields (see macular map below)
+RPE irregularities superior6 (Outer Superior),Superior6(RPE)[um],[um],ETDRS Grid Parameters,RPE irregularities thickness within the ETDRS fields (see macular map below)
+RPE irregularities superior6 volume (Outer Superior),Superior6_vol(RPE)[nl],[nl],ETDRS Grid Parameters,RPE irregularities volume within the ETDRS fields (see macular map below)
+RPE irregularities Nasal6 (Outer Nasal),Nasal6(RPE)[um],[um],ETDRS Grid Parameters,RPE irregularities thickness within the ETDRS fields (see macular map below)
+RPE irregularities Nasal6 volume (Outer Nasal),Nasal6_vol(RPE)[nl],[nl],ETDRS Grid Parameters,RPE irregularities volume within the ETDRS fields (see macular map below)
+RPE irregularities inferior6 (Outer Inferior),Inferior6(RPE)[um],[um],ETDRS Grid Parameters,RPE irregularities volume within the ETDRS fields (see macular map below)
+RPE irregularities inferior6 volume (Outer Inferior),Inferior6_vol(RPE)[nl],[nl],ETDRS Grid Parameters,RPE irregularities volume within the ETDRS fields (see macular map below)
+RPE irregularities Tempo6 (Outer Temporal),Tempo6(RPE)[um],[um],ETDRS Grid Parameters,RPE irregularities volume within the ETDRS fields (see macular map below)
+RPE irregularities Tempo6 volume (Outer Temporal),Tempo6_vol(RPE)[nl],[nl],ETDRS Grid Parameters,RPE irregularities volume within the ETDRS fields (see macular map below)
+Central Sub Field Thickness of the retina (CST),CST[um],[um],ETDRS Grid Parameters,Retinal thickness within the center 1 mm diameter circle (see macular map below)
+Central Sub Field Volume of the retina,CSV[nl],[nl],ETDRS Grid Parameters,Retinal volume volume within the center 1 mm diameter circle 
+SRF Central Sub Field Thickness,CSFT(SRF)[um],[um],ETDRS Grid Parameters,SRF thickness within the center 1 mm diameter circle (see macular map below)
+SRF Central Sub Field Fluid Volume,CSFV(SRF)[nl],[nl],ETDRS Grid Parameters,SRF volume volume within the center 1 mm diameter circle 
+IRF Central Sub Field Fluid Thickness,CSFT(IRF)[um],[um],ETDRS Grid Parameters,IRF thickness within the center 1 mm diameter circle (see macular map below)
+IRF Central Sub Field Fluid Volume,CSFV(IRF)[nl],[nl],ETDRS Grid Parameters,IRF volume volume within the center 1 mm diameter circle 
+TRF Central Sub Field Fluid Thickness,CSFT(TRF)[um],[um],ETDRS Grid Parameters,TRF thickness within the center 1 mm diameter circle (see macular map below)
+TRF Central Sub Field Fluid Volume,CSFV(TRF)[nl],[nl],ETDRS Grid Parameters,TRF volume volume within the center 1 mm diameter circle 
+Inner Superior Sub Field Thickness of the retina (SS) ,Superior3[um],[um],ETDRS Grid Parameters,Retinal thickness within the superior quadrant of circle with a 3 mm diameter (see macular map below)
+Inner Superior Sub Field Volume of the retina,Superior3_vol[nl],[nl],ETDRS Grid Parameters,Retinal volume within the superior quadrant of circle with a 3 mm diameter 
+SRF Inner Superior Sub Field Thickness,Superior3(SRF)[um],[um],ETDRS Grid Parameters,SRF thickness within the superior quadrant of circle with a 3 mm diameter (see macular map below)
+SRF Inner Superior Sub Field Volume,Superior3_vol(SRF)[nl],[nl],ETDRS Grid Parameters,SRF volume within the superior quadrant of circle with a 3 mm diameter 
+IRF Inner Superior Sub Field Thickness,Superior3(IRF)[um],[um],ETDRS Grid Parameters,IRF thickness within the superior quadrant of circle with a 3 mm diameter (see macular map below)
+IRF Inner Superior Sub Field Volume,Superior3_vol(IRF)[nl],[nl],ETDRS Grid Parameters,IRF volume within the superior quadrant of circle with a 3 mm diameter 
+TRF Inner Superior Sub Field Thickness,Superior3(TRF)[um],[um],ETDRS Grid Parameters,TRF thickness within the superior quadrant of circle with a 3 mm diameter (see macular map below)
+TRF Inner Superior Sub Field Volume,Superior3_vol(TRF)[nl],[nl],ETDRS Grid Parameters,TRF volume within the superior quadrant of circle with a 3 mm diameter 
+Inner Nasal Sub Field Thickness of the retina (NS),Nasal3[um],[um],ETDRS Grid Parameters,Retinal thickness within the nasal quadrant of circle with a 3 mm diameter (see macular map below)
+Inner Nasal Sub Field Volume of the retina (NS),Nasal3_vol[nl],[nl],ETDRS Grid Parameters,Retinal volume within the nasal quadrant of circle with a 3 mm diameter 
+SRF Inner Nasal Sub Field Thickness ,Nasal3(SRF)[um],[um],ETDRS Grid Parameters,SRF thickness within the nasal quadrant of circle with a 3 mm diameter (see macular map below)
+SRF Inner Nasal Sub Field Volume ,Nasal3_vol(SRF)[nl],[nl],ETDRS Grid Parameters,SRF volume within the nasal quadrant of circle with a 3 mm diameter 
+IRF Inner Nasal Sub Field Thickness ,Nasal3(IRF)[um],[um],ETDRS Grid Parameters,IRF thickness within the nasal quadrant of circle with a 3 mm diameter (see macular map below)
+IRF Inner Nasal Sub Field Volume ,Nasal3_vol(IRF)[nl],[nl],ETDRS Grid Parameters,IRF volume within the nasal quadrant of circle with a 3 mm diameter 
+TRF Inner Nasal Sub Field Thickness ,Nasal3(TRF)[um],[um],ETDRS Grid Parameters,TRF thickness within the nasal quadrant of circle with a 3 mm diameter (see macular map below)
+TRF Inner Nasal Sub Field Volume ,Nasal3_vol(TRF)[nl],[nl],ETDRS Grid Parameters,TRF volume within the nasal quadrant of circle with a 3 mm diameter 
+Inner Inferior Sub Field Thickness of the retina (IS),Inferior3[um],[um],ETDRS Grid Parameters,Retinal thickness within the inferior quadrant of circle with a 3 mm diameter (see macular map below)
+Inner Inferior Sub Field Volume of the retina (IS),Inferior3_vol[nl],[nl],ETDRS Grid Parameters,Retinal volume within the inferior quadrant of circle with a 3 mm diameter 
+SRF Inner Inferior Sub Field Thickness,Inferior3(SRF)[um],[um],ETDRS Grid Parameters,SRF thickness within the inferior quadrant of circle with a 3 mm diameter (see macular map below)
+SRF Inner Inferior Sub Field Volume,Inferior3_vol(SRF)[nl],[nl],ETDRS Grid Parameters,SRF volume within the inferior quadrant of circle with a 3 mm diameter 
+IRF Inner Inferior Sub Field Thickness,Inferior3(IRF)[um],[um],ETDRS Grid Parameters,IRF thickness within the inferior quadrant of circle with a 3 mm diameter (see macular map below)
+IRF Inner Inferior Sub Field Volume,Inferior3_vol(IRF)[nl],[nl],ETDRS Grid Parameters,IRF volume within the inferior quadrant of circle with a 3 mm diameter 
+TRF Inner Inferior Sub Field Thickness,Inferior3(TRF)[um],[um],ETDRS Grid Parameters,TRF thickness within the inferior quadrant of circle with a 3 mm diameter (see macular map below)
+TRF Inner Inferior Sub Field Volume,Inferior3_vol(TRF)[nl],[nl],ETDRS Grid Parameters,TRF volume within the inferior quadrant of circle with a 3 mm diameter 
+Inner Temporal Sub Field Thickness of the retina (TS),Tempo3[um],[um],ETDRS Grid Parameters,Retinal thickness within the temporal quadrant of circle with a 3 mm diameter (see macular map below)
+Inner Temporal Sub Field Volume of the retina (TS),Tempo3_vol[nl],[nl],ETDRS Grid Parameters,Retinal volume within the temporal quadrant of circle with a 3 mm diameter
+SRF Inner Temporal Sub Field Thickness,Tempo3(SRF)[um],[um],ETDRS Grid Parameters,SRF thickness within the temporal quadrant of circle with a 3 mm diameter (see macular map below)
+SRF Inner Temporal Sub Field Volume,Tempo3_vol(SRF)[nl],[nl],ETDRS Grid Parameters,SRF volume within the temporal quadrant of circle with a 3 mm diameter
+IRF Inner Temporal Sub Field Thickness,Tempo3(IRF)[um],[um],ETDRS Grid Parameters,IRF thickness within the temporal quadrant of circle with a 3 mm diameter (see macular map below)
+IRF Inner Temporal Sub Field Volume,Tempo3_vol(IRF)[nl],[nl],ETDRS Grid Parameters,IRF volume within the temporal quadrant of circle with a 3 mm diameter
+TRF Inner Temporal Sub Field Thickness,Tempo3(TRF)[um],[um],ETDRS Grid Parameters,TRF thickness within the temporal quadrant of circle with a 3 mm diameter (see macular map below)
+TRF Inner Temporal Sub Field Volume,Tempo3_vol(TRF)[nl],[nl],ETDRS Grid Parameters,TRF volume within the temporal quadrant of circle with a 3 mm diameter
+Inner Superior Sub Field Thickness of the retina (SS) ,Superior6[um],[um],ETDRS Grid Parameters,Retinal thickness within the superior quadrant of circle with a 6 mm diameter (see macular map below)
+Inner Superior Sub Field Volume of the retina,Superior6_vol[nl],[nl],ETDRS Grid Parameters,Retinal volume within the superior quadrant of circle with a 6 mm diameter 
+SRF Inner Superior Sub Field Thickness,Superior6(SRF)[um],[um],ETDRS Grid Parameters,SRF thickness within the superior quadrant of circle with a 6 mm diameter (see macular map below)
+SRF Inner Superior Sub Field Volume,Superior6_vol(SRF)[nl],[nl],ETDRS Grid Parameters,SRF volume within the superior quadrant of circle with a 6 mm diameter 
+IRF Inner Superior Sub Field Thickness,Superior6(IRF)[um],[um],ETDRS Grid Parameters,IRF thickness within the superior quadrant of circle with a 6 mm diameter (see macular map below)
+IRF Inner Superior Sub Field Volume,Superior6_vol(IRF)[nl],[nl],ETDRS Grid Parameters,IRF volume within the superior quadrant of circle with a 6 mm diameter 
+TRF Inner Superior Sub Field Thickness,Superior6(TRF)[um],[um],ETDRS Grid Parameters,TRF thickness within the superior quadrant of circle with a 6 mm diameter (see macular map below)
+TRF Inner Superior Sub Field Volume,Superior6_vol(TRF)[nl],[nl],ETDRS Grid Parameters,TRF volume within the superior quadrant of circle with a 6 mm diameter 
+Inner Nasal Sub Field Thickness of the retina (NS),Nasal6[um],[um],ETDRS Grid Parameters,Retinal thickness within the nasal quadrant of circle with a 6mm diameter (see macular map below)
+Inner Nasal Sub Field Volume of the retina (NS),Nasal6_vol[nl],[nl],ETDRS Grid Parameters,Retinal volume within the nasal quadrant of circle with a 6mm diameter
+SRF Inner Nasal Sub Field Thickness ,Nasal6(SRF)[um],[um],ETDRS Grid Parameters,SRF thickness within the nasal quadrant of circle with a 6mm diameter (see macular map below)
+SRF Inner Nasal Sub Field Volume ,Nasal6_vol(SRF)[nl],[nl],ETDRS Grid Parameters,SRF volume within the nasal quadrant of circle with a 6mm diameter
+IRF Inner Nasal Sub Field Thickness ,Nasal6(IRF)[um],[um],ETDRS Grid Parameters,IRF thickness within the nasal quadrant of circle with a 6mm diameter (see macular map below)
+IRF Inner Nasal Sub Field Volume ,Nasal6_vol(IRF)[nl],[nl],ETDRS Grid Parameters,IRF volume within the nasal quadrant of circle with a 6mm diameter
+TRF Inner Nasal Sub Field Thickness ,Nasal6(TRF)[um],[um],ETDRS Grid Parameters,TRF thickness within the nasal quadrant of circle with a 6mm diameter (see macular map below)
+TRF Inner Nasal Sub Field Volume ,Nasal6_vol(TRF)[nl],[nl],ETDRS Grid Parameters,TRF volume within the nasal quadrant of circle with a 6mm diameter
+Inner Inferior Sub Field Thickness of the retina (IS),Inferior6[um],[um],ETDRS Grid Parameters,Retinal thickness within the inferior quadrant of circle with a 6 mm diameter (see macular map below)
+Inner Inferior Sub Field Volume of the retina (IS),Inferior6_vol[nl],[nl],ETDRS Grid Parameters,Retinal volume within the inferior quadrant of circle with a 6 mm diameter
+SRF Inner Inferior Sub Field Thickness,Inferior6(SRF)[um],[um],ETDRS Grid Parameters,SRF thickness within the inferior quadrant of circle with a 6 mm diameter (see macular map below)
+SRF Inner Inferior Sub Field Volume,Inferior6_vol(SRF)[nl],[nl],ETDRS Grid Parameters,SRF volume within the inferior quadrant of circle with a 6 mm diameter
+IRF Inner Inferior Sub Field Thickness,Inferior6(IRF)[um],[um],ETDRS Grid Parameters,IRF thickness within the inferior quadrant of circle with a 6 mm diameter (see macular map below)
+IRF Inner Inferior Sub Field Volume,Inferior6_vol(IRF)[nl],[nl],ETDRS Grid Parameters,IRF volume within the inferior quadrant of circle with a 6 mm diameter
+TRF Inner Inferior Sub Field Thickness,Inferior6(TRF)[um],[um],ETDRS Grid Parameters,TRF thickness within the inferior quadrant of circle with a 6 mm diameter (see macular map below)
+TRF Inner Inferior Sub Field Volume,Inferior6_vol(TRF)[nl],[nl],ETDRS Grid Parameters,TRF volume within the inferior quadrant of circle with a 6 mm diameter
+Inner Temporal Sub Field Thickness of the retina (TS),Tempo6[um],[um],ETDRS Grid Parameters,Retinal thickness within the temporal quadrant of circle with a 6 mm diameter (see macular map below)
+Inner Temporal Sub Field Volume of the retina (TS),Tempo6_vol[nl],[nl],ETDRS Grid Parameters,Retinal volume within the temporal quadrant of circle with a 6 mm diameter 
+SRF Inner Temporal Sub Field Thickness,Tempo6(SRF)[um],[um],ETDRS Grid Parameters,SRF thickness within the temporal quadrant of circle with a 6 mm diameter (see macular map below)
+SRF Inner Temporal Sub Field Volume,Tempo6_vol(SRF)[nl],[nl],ETDRS Grid Parameters,SRF volume within the temporal quadrant of circle with a 6 mm diameter 
+IRF Inner Temporal Sub Field Thickness,Tempo6(IRF)[um],[um],ETDRS Grid Parameters,IRF thickness within the temporal quadrant of circle with a 6 mm diameter (see macular map below)
+IRF Inner Temporal Sub Field Volume,Tempo6_vol(IRF)[nl],[nl],ETDRS Grid Parameters,IRF volume within the temporal quadrant of circle with a 6 mm diameter 
+TRF Inner Temporal Sub Field Thickness,Tempo6(TRF)[um],[um],ETDRS Grid Parameters,TRF thickness within the temporal quadrant of circle with a 6 mm diameter (see macular map below)
+TRF Inner Temporal Sub Field Volume,Tempo6_vol(TRF)[nl],[nl],ETDRS Grid Parameters,TRF volume within the temporal quadrant of circle with a 6 mm diameter 
