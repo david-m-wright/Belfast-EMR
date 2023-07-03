@@ -14,12 +14,15 @@ source(rprojroot::find_rstudio_root_file("code/TASMC-assemble-NOA-data.R"))
 var_desc <- read_csv(find_rstudio_root_file("data-dictionary/Belfast-EMR-derived-variables.csv"))
 
 # Load the clinical data (MD Clone)
-mdc_raw <- read_csv("//fas8200main-n2/OphBelfast/MDC_Updated_16062023_anon_david.csv") %>% 
+mdc_raw <- read_csv("//fas8200main-n2/OphBelfast/MDC_Updated_16062023_anon_david.csv") %>%
+  rename(PatientID = ID_anon, 
+         EyeCode = EYE,
+         Gender = GENDER) %>% 
   mutate(Date = dmy(Date),
          exclude_research_patient = is.na(`Is_RP_Flg RP= Research patients 1=Yes 0=No`)|  
            `Is_RP_Flg RP= Research patients 1=Yes 0=No` == 1,
          exclude_covid = `Is_Pre_COVID_Flg  1=Yes 0=No` == 0) %>% 
-  mutate(across(GENDER, as.factor)) %>% 
+  mutate(across(Gender, as.factor)) %>% 
   filter(!is.na(Date),
          !is.na(AGE))
 
@@ -30,19 +33,19 @@ mdc <- mdc_raw %>%
 
 # Patient details
 patients_raw <- mdc %>% 
-  distinct(ID_anon, GENDER)
+  distinct(PatientID, Gender)
 
 
 # Find date of first injection for each eye (index_date) and calculate treatment intervals
 injections_raw <- mdc %>% 
   filter(EVENT %in% c("AVASTIN", "EYLEA", "LUCENTIS")) %>% 
-  group_by(ID_anon, EYE) %>% 
+  group_by(PatientID, EyeCode) %>% 
   mutate(index_date = min(Date),
          years_treated = interval(index_date, Date)/dyears(),
          # Year of treatment for each eye starts at 1
          treatment_year = as.factor(floor(years_treated) + 1)) %>% 
   ungroup() %>% 
-  select(ID_anon, EYE, AGE, index_date, Date, EVENT, years_treated, treatment_year)
+  select(PatientID, EyeCode, AGE, index_date, Date, EVENT, years_treated, treatment_year)
 
 
 ## Prepare series of measurements over time ##
@@ -50,7 +53,7 @@ injections_raw <- mdc %>%
 # Injection history summary by eye
 # Find date of final injections and number of injections for each eye
 injection_summary_eye <- injections_raw %>% 
-  group_by(ID_anon, EYE) %>% 
+  group_by(PatientID, EyeCode) %>% 
   summarise(index_date = min(Date),
             final_injection_date = max(Date),
             total_injections = n(), 
@@ -61,25 +64,25 @@ injection_summary_eye <- injections_raw %>%
 # Visual acuity
 visual_acuity <- mdc %>% 
   filter(EVENT == "VA") %>% 
-  select(ID_anon, Date, `BCVA OD`, `BCVA OS`) %>% 
+  select(PatientID, Date, `BCVA OD`, `BCVA OS`) %>% 
     pivot_longer(cols = c("BCVA OD", "BCVA OS"), 
                  names_prefix = "BCVA ", 
-                 names_to = "EYE",
+                 names_to = "EyeCode",
                  values_to = "va_logmar") %>% 
-  group_by(ID_anon, EYE, Date) %>% 
+  group_by(PatientID, EyeCode, Date) %>% 
   slice_head(n = 1)
   
 
 # For each visual acuity measurement, calculate the time since the first injection (index_date)
-va_raw <- as.data.table(injection_summary_eye)[, .(ID_anon, EYE, index_date)][ 
+va_raw <- as.data.table(injection_summary_eye)[, .(PatientID, EyeCode, index_date)][ 
   # Join injection_summary_eye and visual_acuity tables
-  as.data.table(visual_acuity), .(ID_anon, EYE, index_date, Date, va_logmar), on = .(ID_anon, EYE)][
+  as.data.table(visual_acuity), .(PatientID, EyeCode, index_date, Date, va_logmar), on = .(PatientID, EyeCode)][
     # Calculate months since index date
     , months_since_index:=interval(index_date, Date)/dmonths()][
       # Calculate years ince index date
       , years_since_index := interval(index_date, Date)/dyears()][  
         # Mark baseline measurements (closest measurement to baseline)  
-         , baseline := abs(months_since_index) == min(abs(months_since_index)), by = .(ID_anon, EYE)][
+         , baseline := abs(months_since_index) == min(abs(months_since_index)), by = .(PatientID, EyeCode)][
            # Only retain eyes that received injections (and hence had a baseline measurement)
            !is.na(baseline),
            ]
@@ -88,13 +91,13 @@ va_raw <- as.data.table(injection_summary_eye)[, .(ID_anon, EYE, index_date)][
 ## NOA fluid measurements
 # For each OCT fluid measurement, calculate the time since the first injection (index_date)
 fluid_raw <- as.data.table(injection_summary_eye)[
-  , .(ID_anon, EYE, index_date)][
+  , .(PatientID, EyeCode, index_date)][
     # Join injection_summary_eye and NOA fluid measurements
-    as.data.table(noa), on = .(ID_anon, EYE)][
+    as.data.table(noa), on = .(PatientID, EyeCode)][
       # Calculate months since index date
       , months_since_index:=interval(index_date, DATE)/dmonths()][
         # Mark baseline measurements (closest measurement to baseline)  
-        , baseline := abs(months_since_index) == min(abs(months_since_index)), by = .(ID_anon, EYE)]
+        , baseline := abs(months_since_index) == min(abs(months_since_index)), by = .(PatientID, EyeCode)]
 
 
 ### Assemble eye level dataset (single row per eye) ###
@@ -104,16 +107,16 @@ eye_raw <- patients_raw %>%
   # Extract age at first injection (index date)
   inner_join(injections_raw %>% 
               filter(Date == index_date) %>% 
-            select(ID_anon, EYE, index_age = AGE),
-            by = "ID_anon", multiple = "all") %>% 
+            select(PatientID, EyeCode, index_age = AGE),
+            by = "PatientID", multiple = "all") %>% 
   
   # Calculate years treated (index to final injection)
-  left_join(injection_summary_eye, by = c("ID_anon", "EYE")) %>% 
+  left_join(injection_summary_eye, by = c("PatientID", "EyeCode")) %>% 
   mutate(years_treated = interval(index_date, final_injection_date)/dyears()) %>% 
   
   # Calculate years from index to end of VA monitoring
-  left_join(va_raw[!is.na(years_since_index), by = .(ID_anon, EYE), .(years_va = max(years_since_index))],
-            by = c("ID_anon", "EYE")) %>% 
+  left_join(va_raw[!is.na(years_since_index), by = .(PatientID, EyeCode), .(years_va = max(years_since_index))],
+            by = c("PatientID", "EyeCode")) %>% 
   
   # For a proportion of eyes years_treated is greater than years_observed 
   # Where this occurs, set years observed to the greater of the two
@@ -123,16 +126,16 @@ eye_raw <- patients_raw %>%
   left_join(va_raw %>%
               # filter(baseline) %>%
                filter(baseline, months_since_index > -1.3 & months_since_index <=0) %>%
-              select(ID_anon, EYE, va_logmar),
-            by = c("ID_anon", "EYE")) %>% 
+              select(PatientID, EyeCode, va_logmar),
+            by = c("PatientID", "EyeCode")) %>% 
   
   
   # Join presence of fluid measurements (closest to index date but up to 40 days prior)
   left_join(fluid_raw %>% 
                filter(baseline) %>% 
                # filter(baseline, months_since_index > -1.3 & months_since_index <=0) %>% 
-              transmute(ID_anon, EYE, fluid_measurement = baseline), 
-            by = c("ID_anon", "EYE")) %>% 
+              transmute(PatientID, EyeCode, fluid_measurement = baseline), 
+            by = c("PatientID", "EyeCode")) %>% 
   
   mutate(across(fluid_measurement, ~if_else(is.na(.), FALSE, .))) %>%
   
@@ -183,12 +186,12 @@ eye <- eye_raw %>%
 # Just the injection history for the selected eyes
 injections <- injections_raw %>% 
   inner_join(eye %>% 
-               select(ID_anon, EYE), by = c("ID_anon", "EYE"))
+               select(PatientID, EyeCode), by = c("PatientID", "EyeCode"))
 
 # Just the VA history relating to the selected eyes
 va_history_raw <- va_raw %>% 
   inner_join(eye %>% 
-               select(ID_anon, EYE), by = c("ID_anon", "EYE")) %>% 
+               select(PatientID, EyeCode), by = c("PatientID", "EyeCode")) %>% 
   # Roll forward baseline VA measurements so that all series start at the index date 
   # (max roll forward is 40 days)
   # Would gain ~20 eyes if allowed two week roll back after index date.
@@ -222,11 +225,11 @@ setkey(va_history_raw, months_since_index)
 va_history <- snapshots[va_history_raw, roll = "nearest"][
   , snapshot := .I == .I[which.min(abs(months_since_index - follow_up_month))] &
     months_since_index >= lower_lim &
-    months_since_index <= upper_lim, by = c("ID_anon", "EYE", "follow_up_month")][
+    months_since_index <= upper_lim, by = c("PatientID", "EyeCode", "follow_up_month")][
       
       # Calculate change in VA from baseline
       , `:=` (va_change_logmar = va_logmar - va_logmar[(snapshot & baseline)])
-      , by=.(ID_anon, EYE)][
+      , by=.(PatientID, EyeCode)][
         # Classify VA change into three categories
         , va_change_lines := cut(va_change_logmar, 
                                  breaks = c(min(va_change_logmar, na.rm = TRUE), -0.2, 0.19, max(va_change_logmar, na.rm = TRUE)), 
@@ -241,7 +244,7 @@ va_history <- snapshots[va_history_raw, roll = "nearest"][
 fluid_history_raw <- fluid_raw %>% 
   inner_join(eye %>% 
                filter(fluid_measurement) %>% 
-               select(ID_anon, EYE), by = c("ID_anon", "EYE")) %>% 
+               select(PatientID, EyeCode), by = c("PatientID", "EyeCode")) %>% 
   # Roll forward baseline fluid measurements up to 40 days prior to baseline
   mutate(months_since_index = if_else(baseline & months_since_index > -1.3 & months_since_index < 0, 0, months_since_index)) %>%
   # Assign each measurement to a treatment month (baseline = zero, within first month of treatment = 1)
@@ -261,11 +264,11 @@ setkey(fluid_history_raw, months_since_index)
 fluid_history <- snapshots[fluid_history_raw, roll = "nearest"][
   , snapshot := .I == .I[which.min(abs(months_since_index - follow_up_month))] &
     months_since_index >= lower_lim &
-    months_since_index <= upper_lim, by = c("ID_anon", "EYE", "follow_up_month")]#[
+    months_since_index <= upper_lim, by = c("PatientID", "EyeCode", "follow_up_month")]#[
 
 
 treatment_intervals <- injections %>%
-  group_by(ID_anon, EYE) %>% 
+  group_by(PatientID, EyeCode) %>% 
   mutate(next_encounter = lead(Date),
          treatment_interval_days = interval(Date, next_encounter)/ddays(), 
          treatment_interval_weeks = interval(Date, next_encounter)/dweeks(),
@@ -281,14 +284,14 @@ treatment_intervals <- injections %>%
   # Injection sequence (index injection = 1)
   mutate(injection_seq = row_number()) %>% 
   ungroup() %>% 
-  mutate(sequence_id = abbreviate(paste(ID_anon, EYE))) 
+  mutate(sequence_id = abbreviate(paste(PatientID, EyeCode))) 
 
 
 ## Compare visual acuity and fluid measurements at baseline
 va_fl <- eye %>% 
   inner_join(fluid_history %>% 
                filter(baseline),
-             by = c("ID_anon", "EYE"))
+             by = c("PatientID", "EyeCode"))
 
 va_fl_correlations <- va_fl %>% 
   select(all_of(c(noa_fluid, noa_retinal, noa_grid)) & where(is.numeric)) %>% 

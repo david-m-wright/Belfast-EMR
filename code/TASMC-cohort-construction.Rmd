@@ -65,10 +65,10 @@ Fluid measurements
 
 ## Inclusion and exclusion criteria
 
-EMR for a total of `r nrow(distinct(mdc_raw, ID_anon))` patients were included in the extracted dataset, with `r nrow(injections_raw)` records of anti-VEGF injections. The unit of analysis is the eye but some criteria were applied at the patient level:   
+EMR for a total of `r nrow(distinct(mdc_raw, PatientID))` patients were included in the extracted dataset, with `r nrow(injections_raw)` records of anti-VEGF injections. The unit of analysis is the eye but some criteria were applied at the patient level:   
 
-* Excluded `r nrow(filter(distinct(mdc_raw, ID_anon, exclude_research_patient, exclude_covid), exclude_research_patient))` patients that were involved in a clinical trial and so received different treatments from the majority of patients.     
-* Excluded `r nrow(filter(distinct(mdc_raw, ID_anon, exclude_research_patient, exclude_covid), !exclude_research_patient, exclude_covid))` patients that were first treated during the Covid pandemic, a substantially different group of patients.    
+* Excluded `r nrow(filter(distinct(mdc_raw, PatientID, exclude_research_patient, exclude_covid), exclude_research_patient))` patients that were involved in a clinical trial and so received different treatments from the majority of patients.     
+* Excluded `r nrow(filter(distinct(mdc_raw, PatientID, exclude_research_patient, exclude_covid), !exclude_research_patient, exclude_covid))` patients that were first treated during the Covid pandemic, a substantially different group of patients.    
 
 At the eye level:   
 
@@ -77,7 +77,7 @@ At the eye level:
 * `r nrow(filter(eye_raw, !exclude_age, exclude_lt3_injections))` eyes had fewer than three anti-VEGF injections during the study period  and were excluded.   
 * `r nrow(filter(eye_raw, !exclude_age,  !exclude_lt3_injections, exclude_no_fluid))` eyes did not have a retinal fluid measurement within 40 days prior to or including the index date and were excluded.   
 
-A total of `r nrow(eye)` eyes from `r nrow(distinct(eye, ID_anon))` patients remained after these exclusions. A total of `r nrow(injections)` injections were observed for the cohort, allowing `r nrow(treatment_intervals)` treatment intervals to be observed (between injections). 
+A total of `r nrow(eye)` eyes from `r nrow(distinct(eye, PatientID))` patients remained after these exclusions. A total of `r nrow(injections)` injections were observed for the cohort, allowing `r nrow(treatment_intervals)` treatment intervals to be observed (between injections). 
 
 # Descriptive statistics at baseline
 
@@ -87,7 +87,7 @@ Descriptive statistics for the eyes included in the analysis are given in Tables
 
 ```{r descriptives}
 eye %>%
-   transmute(Age = index_age, GENDER, Eyes = " ") %>%
+   transmute(Age = index_age, Gender, Eyes = " ") %>%
   GenerateDescriptives(type = c(Age = "Mean (Range)")) %>%
   kbl(caption = "Baseline characteristics of eyes with AMD. Frequency and percentage reported for categorical variables.") %>%
   kable_paper()
@@ -116,26 +116,26 @@ eye %>%
 GenerateDescriptives(transmute(va_history, `Total VA exams` = " ")),
 
 va_history %>% 
-  group_by(ID_anon, EYE) %>% 
+  group_by(PatientID, EyeCode) %>% 
   summarise(`VA exams` = n(),
             `VA years observed` = max(months_since_index/12), .groups = "drop") %>% 
-  select(-ID_anon, -EYE) %>% 
+  select(-PatientID, -EyeCode) %>% 
     GenerateDescriptives(type = c(`VA exams` = "Median (Range)",
       `VA years observed` = "Median (Range)")),
 
 va_history %>% 
-  group_by(ID_anon, EYE) %>% 
+  group_by(PatientID, EyeCode) %>% 
   summarise(`VA years observed` = max(months_since_index/12), .groups = "drop") %>% 
-  select(-ID_anon, -EYE) %>% 
+  select(-PatientID, -EyeCode) %>% 
     GenerateDescriptives(),
 
 GenerateDescriptives(transmute(fluid_history, `Total OCT fluid measurements` = " ")),
 
 fluid_history %>% 
-  group_by(ID_anon, EYE) %>% 
+  group_by(PatientID, EyeCode) %>% 
   summarise(`OCT fluid measurements` = n(),
             `OCT fluid years observed` = max(months_since_index/12), .groups = "drop") %>% 
-  select(-ID_anon, -EYE) %>% 
+  select(-PatientID, -EyeCode) %>% 
     GenerateDescriptives(type = c(`OCT fluid measurements` = "Median (Range)",
       `OCT fluid years observed` = "Median (Range)"))
 ) %>%
@@ -147,12 +147,12 @@ fluid_history %>%
 
 ```{r follow-up-by-year}
 injections %>% 
-  count(ID_anon, EYE, treatment_year, name = "Injections") %>% 
+  count(PatientID, EyeCode, treatment_year, name = "Injections") %>% 
   select(treatment_year, Injections) %>% 
   GenerateDescriptives(col_var = treatment_year) %>% 
   bind_rows(
 injections %>% 
-  count(ID_anon, EYE, treatment_year, name = "Injections") %>% 
+  count(PatientID, EyeCode, treatment_year, name = "Injections") %>% 
   transmute(treatment_year, Injections, Eyes = " ") %>% 
   GenerateDescriptives(col_var = treatment_year, type = c(Injections = "Median (Range)"))
   ) %>% 
@@ -165,10 +165,10 @@ injections %>%
   inner_join(
   fluid_history %>% 
   filter(baseline) %>% 
-  select(ID_anon, EYE, amd_type)
-  , by = c("ID_anon", "EYE")) %>% 
+  select(PatientID, EyeCode, amd_type)
+  , by = c("PatientID", "EyeCode")) %>% 
   group_by(amd_type) %>% 
-  count(amd_type, ID_anon, EYE, treatment_year, name = "Injections") %>% 
+  count(amd_type, PatientID, EyeCode, treatment_year, name = "Injections") %>% 
   select(amd_type, treatment_year, Injections) %>% 
     group_map(.f = ~bind_cols(amd_type = .y, GenerateDescriptives(.x, col_var = treatment_year) )) %>% 
   bind_rows() %>% 
@@ -176,10 +176,10 @@ injections %>%
   inner_join(
   fluid_history %>% 
   filter(baseline) %>% 
-  select(ID_anon, EYE, amd_type)
-  , by = c("ID_anon", "EYE")) %>% 
+  select(PatientID, EyeCode, amd_type)
+  , by = c("PatientID", "EyeCode")) %>% 
   group_by(amd_type) %>% 
-  count(amd_type, ID_anon, EYE, treatment_year, name = "Injections") %>% 
+  count(amd_type, PatientID, EyeCode, treatment_year, name = "Injections") %>% 
   transmute(amd_type, treatment_year, Injections, Eyes = " ") %>% 
     group_map(.f = ~bind_cols(amd_type = .y, GenerateDescriptives(.x, col_var = treatment_year, type = c(Injections = "Median (Range)") ))) %>% 
   bind_rows()
@@ -192,12 +192,12 @@ injections %>%
 ```{r va-followup-by-year}
 va_history %>% 
   filter(treatment_year != "0") %>% 
-  count(ID_anon, EYE, treatment_year, name = "VA measurements") %>% 
+  count(PatientID, EyeCode, treatment_year, name = "VA measurements") %>% 
   select(treatment_year, `VA measurements`) %>% 
   GenerateDescriptives(col_var = treatment_year) %>% 
   bind_rows(va_history %>% 
   filter(treatment_year != "0") %>% 
-  count(ID_anon, EYE, treatment_year, name = "VA measurements") %>% 
+  count(PatientID, EyeCode, treatment_year, name = "VA measurements") %>% 
   transmute(treatment_year, `VA measurements`, Eyes = " ") %>% 
   GenerateDescriptives(col_var = treatment_year, type = c("VA measurements" = "Median (Range)"))) %>% 
   kbl(caption = "Distribution of VA measurements by year of anti-VEGF treatment") %>% 
@@ -208,22 +208,22 @@ va_history %>%
 va_history %>% inner_join(
   fluid_history %>% 
   filter(baseline) %>% 
-  select(ID_anon, EYE, amd_type)
-  , by = c("ID_anon", "EYE")) %>% 
+  select(PatientID, EyeCode, amd_type)
+  , by = c("PatientID", "EyeCode")) %>% 
   group_by(amd_type) %>% 
   filter(treatment_year != "0") %>% 
-  count(amd_type, ID_anon, EYE, treatment_year, name = "VA measurements") %>% 
+  count(amd_type, PatientID, EyeCode, treatment_year, name = "VA measurements") %>% 
   select(amd_type, treatment_year, `VA measurements`) %>% 
   group_map(~bind_cols(amd_type = .y, GenerateDescriptives(.x, col_var = treatment_year))) %>% 
               bind_rows() %>% 
   bind_rows(va_history %>% inner_join(
   fluid_history %>% 
   filter(baseline) %>% 
-  select(ID_anon, EYE, amd_type)
-  , by = c("ID_anon", "EYE")) %>% 
+  select(PatientID, EyeCode, amd_type)
+  , by = c("PatientID", "EyeCode")) %>% 
   group_by(amd_type) %>% 
   filter(treatment_year != "0") %>% 
-  count(amd_type, ID_anon, EYE, treatment_year, name = "VA measurements") %>% 
+  count(amd_type, PatientID, EyeCode, treatment_year, name = "VA measurements") %>% 
   transmute(amd_type, treatment_year, `VA measurements`, Eyes = " ") %>% 
   group_map(~bind_cols(amd_type = .y, GenerateDescriptives(.x, col_var = treatment_year, type = c("VA measurements" = "Median (Range)")))) %>% 
     bind_rows()) %>% 
@@ -250,11 +250,11 @@ va_history %>%
 ```{r va-baseline-amd-type}
 fluid_history %>% 
   filter(baseline) %>% 
-  select(ID_anon, EYE, amd_type) %>% 
+  select(PatientID, EyeCode, amd_type) %>% 
   inner_join(
 va_history %>% 
   filter(baseline),
-by = c("ID_anon", "EYE")) %>% 
+by = c("PatientID", "EyeCode")) %>% 
   transmute(amd_type, va_logmar, Eyes = "n") %>% 
   GenerateDescriptives(col_var = amd_type, type = c(va_logmar = "Median (IQR)")) %>% 
   left_join(var_desc, by = "Variable") %>%
@@ -285,7 +285,7 @@ fluid_history %>%
 ```{r fluid-general-baseline-by-age}
 fluid_history %>% 
   filter(baseline) %>% 
-  inner_join(eye, by = c("ID_anon", "EYE")) %>% 
+  inner_join(eye, by = c("PatientID", "EyeCode")) %>% 
   select(Age, all_of(noa_general)) %>% 
     mutate(Eyes = " ") %>% 
    GenerateDescriptives(col_var = Age, type = c(FramesNum = "Median (Range)", 
@@ -302,10 +302,10 @@ fluid_history %>%
 ```{r fluid-general-baseline-by-gender}
 fluid_history %>% 
   filter(baseline) %>% 
-  inner_join(eye, by = c("ID_anon", "EYE")) %>% 
-  select(GENDER, all_of(noa_general)) %>% 
+  inner_join(eye, by = c("PatientID", "EyeCode")) %>% 
+  select(Gender, all_of(noa_general)) %>% 
     mutate(Eyes = " ") %>% 
-   GenerateDescriptives(col_var = GENDER, type = c(FramesNum = "Median (Range)", NumBscanwtihFluid = "Median (Range)")) %>% 
+   GenerateDescriptives(col_var = Gender, type = c(FramesNum = "Median (Range)", NumBscanwtihFluid = "Median (Range)")) %>% 
   left_join(noa_dictionary %>% 
                  select(Parameter, `Raw Parameter`), 
               by = c("Variable" = "Raw Parameter")) %>% 
@@ -342,7 +342,7 @@ fluid_history %>%
 ```{r fluid-baseline-by-age, warning=FALSE}
 fluid_history %>% 
   filter(baseline) %>% 
-  inner_join(eye, by = c("ID_anon", "EYE")) %>% 
+  inner_join(eye, by = c("PatientID", "EyeCode")) %>% 
   select(Age, all_of(noa_fluid), `PED volume[nl]`) %>% 
     mutate(Eyes = " ") %>% 
    GenerateDescriptives(col_var = Age,
@@ -363,7 +363,7 @@ fluid_history %>%
   # Fit a linear trend with age as a continuous variable
   left_join(fluid_history %>%
   filter(baseline) %>%
-  inner_join(eye, by = c("ID_anon", "EYE")) %>%
+  inner_join(eye, by = c("PatientID", "EyeCode")) %>%
   select(index_age, all_of(noa_fluid), `PED volume[nl]`) %>%
   map_dfr( .y = .$index_age, ~tidy(lm(.x~.y)), .id = "Variable") %>% 
   filter(term == ".y", !is.na(p.value)) %>% 
@@ -381,10 +381,10 @@ fluid_history %>%
 ```{r fluid-baseline-by-gender, warning=FALSE}
 fluid_history %>% 
   filter(baseline) %>% 
-  inner_join(eye, by = c("ID_anon", "EYE")) %>% 
-  select(GENDER, all_of(noa_fluid), `PED volume[nl]`) %>% 
+  inner_join(eye, by = c("PatientID", "EyeCode")) %>% 
+  select(Gender, all_of(noa_fluid), `PED volume[nl]`) %>% 
     mutate(Eyes = " ") %>% 
-   GenerateDescriptives(col_var = GENDER,
+   GenerateDescriptives(col_var = Gender,
                         type = c(SRFVolumeNl = "Median (IQR)",
                           IRFVolumeNl = "Median (IQR)",
                           TRFVolumeNl = "Median (IQR)",
@@ -403,9 +403,9 @@ fluid_history %>%
   # Fit a linear trend with age as a continuous variable
   left_join(fluid_history %>%
   filter(baseline) %>%
-  inner_join(eye, by = c("ID_anon", "EYE")) %>%
-  select(GENDER, all_of(noa_fluid), `PED volume[nl]`) %>%
-  map_dfr( .y = .$GENDER, ~tidy(lm(.x~.y)), .id = "Variable") %>% 
+  inner_join(eye, by = c("PatientID", "EyeCode")) %>%
+  select(Gender, all_of(noa_fluid), `PED volume[nl]`) %>%
+  map_dfr( .y = .$Gender, ~tidy(lm(.x~.y)), .id = "Variable") %>% 
   filter(term == ".yM", !is.na(p.value)) %>% 
   transmute(Variable, `Difference in means (M-F)` = estimate, P = format.pval(p.value, digits = 1,  eps = 0.001)),
   by = "Variable") %>% 
@@ -445,7 +445,7 @@ fluid_history %>%
 ```{r fluid-retinal-baseline-by-age}
 fluid_history %>% 
   filter(baseline) %>% 
-  inner_join(eye, by = c("ID_anon", "EYE")) %>% 
+  inner_join(eye, by = c("PatientID", "EyeCode")) %>% 
   select(Age, all_of(noa_retinal)) %>% 
     mutate(Eyes = " ") %>% 
    GenerateDescriptives(col_var = Age) %>% 
@@ -460,10 +460,10 @@ fluid_history %>%
 ```{r fluid-retinal-baseline-by-gender}
 fluid_history %>% 
   filter(baseline) %>% 
-  inner_join(eye, by = c("ID_anon", "EYE")) %>% 
-  select(GENDER, all_of(noa_retinal)) %>% 
+  inner_join(eye, by = c("PatientID", "EyeCode")) %>% 
+  select(Gender, all_of(noa_retinal)) %>% 
     mutate(Eyes = " ") %>% 
-   GenerateDescriptives(col_var = GENDER) %>% 
+   GenerateDescriptives(col_var = Gender) %>% 
    left_join(noa_dictionary %>% 
                  select(Parameter, `Raw Parameter`), 
               by = c("Variable" = "Raw Parameter")) %>% 
