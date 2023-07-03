@@ -388,45 +388,6 @@ baseline_fluid_grid <- fluid_history %>%
   by = c("name" = "Raw Parameter"))
 
 
-# Function to produce a circular plot of the ETDRS grid with labels corresponding to values in the source data 
-# Args:
-# dat = data.frame with joining columns "region" and "circ" 
-# label_col = bare variable name containing the labels to apply to the grid
-PlotETDRSGrid <- function(dat, label_col){
-  
-  label_value <- enquo(label_col)
-  
-  etdrs_rect <- tibble(region = as_factor(c("CS", "SUP", "NAS", "INF", "TEM", "SUP", "NAS", "INF", "TEM")),
-                       prefix = c("", rep("i", 4), rep("o", 4)),
-                       circ = c(1, rep(3, 4), rep(6, 4)),
-                       xmin = c(0, rep(0.5, 4), rep(1.5, 4)),
-                       xmax = c(0.5, rep(1.5, 4), rep(3, 4)),
-                       ymin = c(0, 0, 0.25, 0.5, 0.75, 0, 0.25, 0.5, 0.75),
-                       ymax = c(1, 0.25, 0.5, 0.75, 1, 0.25, 0.5, 0.75,1),
-                       xtext = c(0, xmax[-1] - (xmax[-1]-xmin[-1])/2),
-                       ytext = c(0, ymax[-1] - (ymax[-1]-ymin[-1])/2))
-  
-  dat %>% 
-    inner_join(etdrs_rect, by = c("region", "circ")) %>% 
-  
-    ggplot(aes(x = xtext, y = ytext)) +
-    geom_rect(data = filter(etdrs_rect, region != "CS"), aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax), fill = "white", colour = "black", linewidth = 1.5) + 
-    geom_rect(data = filter(etdrs_rect, region == "CS"), aes(xmin = xmin+0.01, xmax = xmax-0.01, ymin = ymin+0.01, ymax = ymax-0.01), fill = "white") +
-    geom_text(aes(label = !!label_value)) +
-    scale_y_continuous(breaks = NULL) +
-    scale_x_continuous(breaks = NULL, sec.axis = sec_axis(trans = ~., breaks = NULL, name="Nasal")) +
-    theme_light() +
-    theme(panel.border = element_blank(), panel.grid = element_blank()) +
-    labs(x= "Temporal", y = NULL)+
-    coord_polar(theta = "y", start = 315*pi/180)
-  
-}
-# 
-# baseline_fluid_grid %>% 
-#   filter(str_detect(abbr_metric, "IRF Vol")) %>% 
-#   PlotETDRSGrid(valform) 
-
- 
 
 
 ## Calculate treatment intervals for the selected eyes

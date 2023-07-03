@@ -1,0 +1,559 @@
+---
+title: "BIRAX study - TASMC cohort construction"
+author: "David M Wright - d.wright@qub.ac.uk"
+date: "Document compiled: `r Sys.Date()`"
+output: 
+  bookdown::html_document2:
+     toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(knitr)
+library(kableExtra)
+library(rprojroot)
+library(tidyverse)
+library(broom)
+```
+
+`r R.version.string`   
+
+# Introduction
+
+```{r run-analysis, include=FALSE}
+source(find_rstudio_root_file("Code/TASMC-assemble-cohort.R"))
+```
+
+This analysis is of Electronic Medical Records (EMR) from the Tel Aviv Sourasky Medical Centre extracted over the period `r min(mdc$Date)` to `r max(mdc$Date)`. The aim of the study is to investigate the potential for machine learning to identify factors and biomarkers associated with long-term AMD treatment response.
+
+This document describes construction of the analysis cohort. 
+
+# Data sources
+
+Three data files were provided, `MDC_Updated_16062023_anon_david.xslx` contained the clinical records of all injections, OCT scans and VA measurements (MD Clone data). `Notal+MDC with additional IDs 16062023_anon_david.xslx` and `Results Notal_with original IDs_and_anon_185.xslx` contained the fluid measurements derived from OCT scans using the Notal Ophthalmic Analyser (NOA). All files were converted to .csv format before further processing.
+
+ 
+# Cohort construction
+
+The following steps were taken to process the data:   
+
+Injections   
+
+* Identification of the first injection recorded for each eye and the date (the index date).   
+* Calculation of treatment intervals.   
+* Calculate the total time under treatment.   
+* Indicate the year of treatment for each injection (from the index date, starting at 1).
+
+Patient demographics    
+
+* Extraction of patient age at the index date and calculation of total observation period for each eye (index age to age at which injections or visual acuity (VA) monitoring stopped, whichever was sooner).    
+
+Visual acuity
+
+* Categorisation of visual acuity into 4 Snellen categories (calculations in logMAR units).   
+* Identified baseline VA measurement (closest measurement to index date: earliest date 40 days prior, could not occur after index date).   
+* At each VA measurement calculate VA change (logMAR) since the baseline (index date).    
+* Categorise VA change since baseline in ETDRS lines (calculations in logMAR units)).  
+* Identification of the closest VA measurement to each time point of interest during treatment.   
+
+Fluid measurements
+
+* Identified baseline fluid measurement (closest measurement to index date: earliest date 40 days prior, could not occur after index date).    
+* Identification of the closest fluid measurement to each time point of interest during treatment.    
+* Categorised AMD type at each fluid measurement: None/SRF only/IRF only/Both SRF and IRF.   
+
+
+## Inclusion and exclusion criteria
+
+EMR for a total of `r nrow(distinct(mdc_raw, ID_anon))` patients were included in the extracted dataset, with `r nrow(injections_raw)` records of anti-VEGF injections. The unit of analysis is the eye but some criteria were applied at the patient level:   
+
+* Excluded `r nrow(filter(distinct(mdc_raw, ID_anon, exclude_research_patient, exclude_covid), exclude_research_patient))` patients that were involved in a clinical trial and so received different treatments from the majority of patients.     
+* Excluded `r nrow(filter(distinct(mdc_raw, ID_anon, exclude_research_patient, exclude_covid), !exclude_research_patient, exclude_covid))` patients that were first treated during the Covid pandemic, a substantially different group of patients.    
+
+At the eye level:   
+
+* The raw data contained `r nrow(eye_raw)` eyes.   
+* `r nrow(filter(eye_raw, exclude_age))` eyes were in patients aged <50 at the index date and were excluded.
+* `r nrow(filter(eye_raw, !exclude_age, exclude_lt3_injections))` eyes had fewer than three anti-VEGF injections during the study period  and were excluded.   
+* `r nrow(filter(eye_raw, !exclude_age,  !exclude_lt3_injections, exclude_no_fluid))` eyes did not have a retinal fluid measurement within 40 days prior to or including the index date and were excluded.   
+
+A total of `r nrow(eye)` eyes from `r nrow(distinct(eye, ID_anon))` patients remained after these exclusions. A total of `r nrow(injections)` injections were observed for the cohort, allowing `r nrow(treatment_intervals)` treatment intervals to be observed (between injections). 
+
+# Descriptive statistics at baseline
+
+Descriptive statistics for the eyes included in the analysis are given in Tables \@ref(tab:descriptives) to \@ref(tab:fluid-grid-baseline). Statistics are presented at the eye level as some patients were treated in both eyes, with treatment starting at different times. 
+
+## Patient characteristics
+
+```{r descriptives}
+eye %>%
+   transmute(Age = index_age, GENDER, Eyes = " ") %>%
+  GenerateDescriptives(type = c(Age = "Mean (Range)")) %>%
+  kbl(caption = "Baseline characteristics of eyes with AMD. Frequency and percentage reported for categorical variables.") %>%
+  kable_paper()
+```
+A key characteristic of the dataset is the different lengths of follow-up overall (i.e. time period for which records were extracted), in terms of treatment duration and in terms of monitoring for each examination type, given in Table \@ref(tab:follow-up-length). There are several different measures presented:
+
+* _Years observed_ gives the time from the first injection (baseline) to the the last recorded injection or the last recorded VA measurement, whichever was longer.   
+* _Years treated_ gives the time from the first injection to the last recorded injection.   
+* _VA years observed_ gives the time from the first injection to the last recorded VA measurement.   
+
+
+```{r follow-up-length}
+bind_rows(
+eye %>% 
+  transmute(Eyes = " ",
+            `Years observed` = years_observed,
+            `Total injections` = total_injections,
+            Injections = total_injections,
+            `Years treated` = years_treated
+            ) %>% 
+  GenerateDescriptives(type = c(`Years observed` = "Median (Range)", 
+                                Injections = "Median (Range)",
+                                `Years treated` = "Median (Range)",
+                                `Total injections` = " ")),
+
+GenerateDescriptives(transmute(va_history, `Total VA exams` = " ")),
+
+va_history %>% 
+  group_by(ID_anon, EYE) %>% 
+  summarise(`VA exams` = n(),
+            `VA years observed` = max(months_since_index/12), .groups = "drop") %>% 
+  select(-ID_anon, -EYE) %>% 
+    GenerateDescriptives(type = c(`VA exams` = "Median (Range)",
+      `VA years observed` = "Median (Range)")),
+
+va_history %>% 
+  group_by(ID_anon, EYE) %>% 
+  summarise(`VA years observed` = max(months_since_index/12), .groups = "drop") %>% 
+  select(-ID_anon, -EYE) %>% 
+    GenerateDescriptives(),
+
+GenerateDescriptives(transmute(fluid_history, `Total OCT fluid measurements` = " ")),
+
+fluid_history %>% 
+  group_by(ID_anon, EYE) %>% 
+  summarise(`OCT fluid measurements` = n(),
+            `OCT fluid years observed` = max(months_since_index/12), .groups = "drop") %>% 
+  select(-ID_anon, -EYE) %>% 
+    GenerateDescriptives(type = c(`OCT fluid measurements` = "Median (Range)",
+      `OCT fluid years observed` = "Median (Range)"))
+) %>%
+  kbl(caption = "Number of examinations and length of follow-up.") %>% 
+  kable_paper()
+```
+
+## Follow-up by treatment year
+
+```{r follow-up-by-year}
+injections %>% 
+  count(ID_anon, EYE, treatment_year, name = "Injections") %>% 
+  select(treatment_year, Injections) %>% 
+  GenerateDescriptives(col_var = treatment_year) %>% 
+  bind_rows(
+injections %>% 
+  count(ID_anon, EYE, treatment_year, name = "Injections") %>% 
+  transmute(treatment_year, Injections, Eyes = " ") %>% 
+  GenerateDescriptives(col_var = treatment_year, type = c(Injections = "Median (Range)"))
+  ) %>% 
+  kbl(caption = "Distribution of injections received by year of anti-VEGF treatment") %>% 
+  kable_paper()
+```
+
+```{r follow-up-by-year-amd-type}
+injections %>% 
+  inner_join(
+  fluid_history %>% 
+  filter(baseline) %>% 
+  select(ID_anon, EYE, amd_type)
+  , by = c("ID_anon", "EYE")) %>% 
+  group_by(amd_type) %>% 
+  count(amd_type, ID_anon, EYE, treatment_year, name = "Injections") %>% 
+  select(amd_type, treatment_year, Injections) %>% 
+    group_map(.f = ~bind_cols(amd_type = .y, GenerateDescriptives(.x, col_var = treatment_year) )) %>% 
+  bind_rows() %>% 
+  bind_rows(injections %>% 
+  inner_join(
+  fluid_history %>% 
+  filter(baseline) %>% 
+  select(ID_anon, EYE, amd_type)
+  , by = c("ID_anon", "EYE")) %>% 
+  group_by(amd_type) %>% 
+  count(amd_type, ID_anon, EYE, treatment_year, name = "Injections") %>% 
+  transmute(amd_type, treatment_year, Injections, Eyes = " ") %>% 
+    group_map(.f = ~bind_cols(amd_type = .y, GenerateDescriptives(.x, col_var = treatment_year, type = c(Injections = "Median (Range)") ))) %>% 
+  bind_rows()
+  ) %>% 
+  arrange(amd_type, Variable) %>% 
+  kbl(caption = "Distribution of injections received by year of anti-VEGF treatment and fluid type at baseline") %>% 
+  kable_paper()
+```
+
+```{r va-followup-by-year}
+va_history %>% 
+  filter(treatment_year != "0") %>% 
+  count(ID_anon, EYE, treatment_year, name = "VA measurements") %>% 
+  select(treatment_year, `VA measurements`) %>% 
+  GenerateDescriptives(col_var = treatment_year) %>% 
+  bind_rows(va_history %>% 
+  filter(treatment_year != "0") %>% 
+  count(ID_anon, EYE, treatment_year, name = "VA measurements") %>% 
+  transmute(treatment_year, `VA measurements`, Eyes = " ") %>% 
+  GenerateDescriptives(col_var = treatment_year, type = c("VA measurements" = "Median (Range)"))) %>% 
+  kbl(caption = "Distribution of VA measurements by year of anti-VEGF treatment") %>% 
+  kable_paper()
+```
+
+```{r va-followup-by-year-amd-type}
+va_history %>% inner_join(
+  fluid_history %>% 
+  filter(baseline) %>% 
+  select(ID_anon, EYE, amd_type)
+  , by = c("ID_anon", "EYE")) %>% 
+  group_by(amd_type) %>% 
+  filter(treatment_year != "0") %>% 
+  count(amd_type, ID_anon, EYE, treatment_year, name = "VA measurements") %>% 
+  select(amd_type, treatment_year, `VA measurements`) %>% 
+  group_map(~bind_cols(amd_type = .y, GenerateDescriptives(.x, col_var = treatment_year))) %>% 
+              bind_rows() %>% 
+  bind_rows(va_history %>% inner_join(
+  fluid_history %>% 
+  filter(baseline) %>% 
+  select(ID_anon, EYE, amd_type)
+  , by = c("ID_anon", "EYE")) %>% 
+  group_by(amd_type) %>% 
+  filter(treatment_year != "0") %>% 
+  count(amd_type, ID_anon, EYE, treatment_year, name = "VA measurements") %>% 
+  transmute(amd_type, treatment_year, `VA measurements`, Eyes = " ") %>% 
+  group_map(~bind_cols(amd_type = .y, GenerateDescriptives(.x, col_var = treatment_year, type = c("VA measurements" = "Median (Range)")))) %>% 
+    bind_rows()) %>% 
+    arrange(amd_type, desc(Variable)) %>% 
+  kbl(caption = "Distribution of VA measurements by year of anti-VEGF treatment") %>% 
+  kable_paper()
+```
+
+  
+## Visual acuity
+
+```{r va-baseline}
+va_history %>% 
+  filter(baseline) %>% 
+  transmute(va_logmar, Eyes = "n") %>% 
+  GenerateDescriptives(type = c(va_logmar = "Median (IQR)")) %>% 
+  left_join(var_desc, by = "Variable") %>%
+  mutate(Description = coalesce(Description, Variable)) %>%
+  select(Description, everything(), -Variable) %>%
+  kbl(caption = "Distribution of visual acuity outcomes at baseline.") %>% 
+  kable_paper()
+```
+
+```{r va-baseline-amd-type}
+fluid_history %>% 
+  filter(baseline) %>% 
+  select(ID_anon, EYE, amd_type) %>% 
+  inner_join(
+va_history %>% 
+  filter(baseline),
+by = c("ID_anon", "EYE")) %>% 
+  transmute(amd_type, va_logmar, Eyes = "n") %>% 
+  GenerateDescriptives(col_var = amd_type, type = c(va_logmar = "Median (IQR)")) %>% 
+  left_join(var_desc, by = "Variable") %>%
+  mutate(Description = coalesce(Description, Variable)) %>%
+  select(Description, everything(), -Variable) %>%
+  kbl(caption = "Distribution of visual acuity outcomes at baseline by fluid presence.") %>% 
+  kable_paper()
+```
+
+## Retinal fluid distribution
+
+General scan characteristics in terms of the number of B-scans taken and the number in which fluid were detected is given in Table \@ref(tab:fluid-general-baseline). The presence and volume of intra-retinal fluid (IRF), sub-retinal fluid (SRF) and total retinal fluid (TRF) is given in Table \@ref(tab:fluid-baseline), along with estimated correlations between each of the continuous measurements and visual acuity (logMAR). Measurements of retinal volume and the presence of vitreo-macula interface or retinal pigmentary epithelium (RPE) irregularities and detachments is given in Table \@ref(tab:fluid-retinal-baseline). Measurements of fluid and retinal thickness are given for each of the regions on an ETDRS grid are given in Table \@ref(tab:fluid-grid-baseline).
+
+```{r fluid-general-baseline}
+fluid_history %>% 
+  filter(baseline) %>% 
+  select(all_of(noa_general)) %>% 
+    mutate(Eyes = " ") %>% 
+   GenerateDescriptives(type = c(FramesNum = "Median (Range)", NumBscanwtihFluid = "Median (Range)")) %>% 
+  left_join(noa_dictionary %>% 
+                 select(Parameter, `Raw Parameter`), 
+              by = c("Variable" = "Raw Parameter")) %>% 
+   relocate(Parameter, .after = Variable) %>% 
+   kbl(caption = "Distribution of general NOA fluid measurements at baseline") %>% 
+   kable_paper()
+```
+
+```{r fluid-general-baseline-by-age}
+fluid_history %>% 
+  filter(baseline) %>% 
+  inner_join(eye, by = c("ID_anon", "EYE")) %>% 
+  select(Age, all_of(noa_general)) %>% 
+    mutate(Eyes = " ") %>% 
+   GenerateDescriptives(col_var = Age, type = c(FramesNum = "Median (Range)", 
+                                                NumBscanwtihFluid = "Median (Range)"
+                                                )) %>% 
+  left_join(noa_dictionary %>% 
+                 select(Parameter, `Raw Parameter`), 
+              by = c("Variable" = "Raw Parameter")) %>% 
+   relocate(Parameter, .after = Variable) %>% 
+   kbl(caption = "Distribution of general NOA fluid measurements at baseline by age category.") %>% 
+   kable_paper()
+```
+
+```{r fluid-general-baseline-by-gender}
+fluid_history %>% 
+  filter(baseline) %>% 
+  inner_join(eye, by = c("ID_anon", "EYE")) %>% 
+  select(GENDER, all_of(noa_general)) %>% 
+    mutate(Eyes = " ") %>% 
+   GenerateDescriptives(col_var = GENDER, type = c(FramesNum = "Median (Range)", NumBscanwtihFluid = "Median (Range)")) %>% 
+  left_join(noa_dictionary %>% 
+                 select(Parameter, `Raw Parameter`), 
+              by = c("Variable" = "Raw Parameter")) %>% 
+   relocate(Parameter, .after = Variable) %>% 
+   kbl(caption = "Distribution of general NOA fluid measurements at baseline by gender.") %>% 
+   kable_paper()
+```
+
+```{r fluid-baseline, warning=FALSE}
+fluid_history %>% 
+  filter(baseline) %>% 
+  select(all_of(noa_fluid), `PED volume[nl]`) %>% 
+    mutate(Eyes = " ") %>% 
+   GenerateDescriptives(type = c(SRFVolumeNl = "Median (IQR)",
+                          IRFVolumeNl = "Median (IQR)",
+                          TRFVolumeNl = "Median (IQR)",
+                          `Average_SRF_height[um]` = "Median (IQR)",
+                          `Average_IRF_height[um]` = "Median (IQR)",
+                          `Average_TRF_height[um]` = "Median (IQR)",
+                          `MaxSRF_height[um]` = "Median (IQR)",
+                          `MaxIRF_height[um]` = "Median (IQR)",
+                          `PED volume[nl]` = "Median (IQR)")) %>% 
+  left_join(va_fl_correlations, by = "Variable") %>% 
+   left_join(noa_dictionary %>% 
+                 select(Parameter, `Raw Parameter`), 
+              by = c("Variable" = "Raw Parameter")) %>% 
+   relocate(Parameter, .after = Variable) %>% 
+   arrange(desc(estimate)) %>% 
+   select(-estimate) %>% 
+   kbl(caption = "Distribution of NOA OCT fluid measurements at baseline, sorted by strength of correlation with visual acuity.") %>% 
+   kable_paper()
+```
+
+```{r fluid-baseline-by-age, warning=FALSE}
+fluid_history %>% 
+  filter(baseline) %>% 
+  inner_join(eye, by = c("ID_anon", "EYE")) %>% 
+  select(Age, all_of(noa_fluid), `PED volume[nl]`) %>% 
+    mutate(Eyes = " ") %>% 
+   GenerateDescriptives(col_var = Age,
+                        type = c(SRFVolumeNl = "Median (IQR)",
+                          IRFVolumeNl = "Median (IQR)",
+                          TRFVolumeNl = "Median (IQR)",
+                          `Average_SRF_height[um]` = "Median (IQR)",
+                          `Average_IRF_height[um]` = "Median (IQR)",
+                          `Average_TRF_height[um]` = "Median (IQR)",
+                          `MaxSRF_height[um]` = "Median (IQR)",
+                          `MaxIRF_height[um]` = "Median (IQR)",
+                          `PED volume[nl]` = "Median (IQR)"
+                        )) %>% 
+   left_join(noa_dictionary %>% 
+                 select(Parameter, `Raw Parameter`), 
+              by = c("Variable" = "Raw Parameter")) %>% 
+  
+  # Fit a linear trend with age as a continuous variable
+  left_join(fluid_history %>%
+  filter(baseline) %>%
+  inner_join(eye, by = c("ID_anon", "EYE")) %>%
+  select(index_age, all_of(noa_fluid), `PED volume[nl]`) %>%
+  map_dfr( .y = .$index_age, ~tidy(lm(.x~.y)), .id = "Variable") %>% 
+  filter(term == ".y", !is.na(p.value)) %>% 
+  transmute(Variable, Trend = estimate, P = format.pval(p.value, digits = 1,  eps = 0.001)),
+  by = "Variable") %>% 
+  
+  # Assemble the output table
+   relocate(Parameter, .after = Variable) %>% 
+   kbl(digits = 2, caption = "Distribution of NOA OCT fluid measurements at baseline by age category. P values are for linear trend in age (treated as continuous variable).") %>% 
+   kable_paper()
+
+```
+
+
+```{r fluid-baseline-by-gender, warning=FALSE}
+fluid_history %>% 
+  filter(baseline) %>% 
+  inner_join(eye, by = c("ID_anon", "EYE")) %>% 
+  select(GENDER, all_of(noa_fluid), `PED volume[nl]`) %>% 
+    mutate(Eyes = " ") %>% 
+   GenerateDescriptives(col_var = GENDER,
+                        type = c(SRFVolumeNl = "Median (IQR)",
+                          IRFVolumeNl = "Median (IQR)",
+                          TRFVolumeNl = "Median (IQR)",
+                          `Average_SRF_height[um]` = "Median (IQR)",
+                          `Average_IRF_height[um]` = "Median (IQR)",
+                          `Average_TRF_height[um]` = "Median (IQR)",
+                          `MaxSRF_height[um]` = "Median (IQR)",
+                          `MaxIRF_height[um]` = "Median (IQR)",
+                          `PED volume[nl]` = "Median (IQR)"
+                        )) %>% 
+   left_join(noa_dictionary %>% 
+                 select(Parameter, `Raw Parameter`), 
+              by = c("Variable" = "Raw Parameter")) %>% 
+  
+    
+  # Fit a linear trend with age as a continuous variable
+  left_join(fluid_history %>%
+  filter(baseline) %>%
+  inner_join(eye, by = c("ID_anon", "EYE")) %>%
+  select(GENDER, all_of(noa_fluid), `PED volume[nl]`) %>%
+  map_dfr( .y = .$GENDER, ~tidy(lm(.x~.y)), .id = "Variable") %>% 
+  filter(term == ".yM", !is.na(p.value)) %>% 
+  transmute(Variable, `Difference in means (M-F)` = estimate, P = format.pval(p.value, digits = 1,  eps = 0.001)),
+  by = "Variable") %>% 
+  
+   relocate(Parameter, .after = Variable) %>% 
+   kbl(digits = 2, caption = "Distribution of NOA OCT fluid measurements at baseline by gender.") %>% 
+   kable_paper()
+```
+
+
+```{r fluid-retinal-baseline, warning=FALSE}
+fluid_history %>% 
+  filter(baseline) %>% 
+  select(all_of(noa_retinal)) %>% 
+    mutate(Eyes = " ") %>% 
+   GenerateDescriptives(type = c(
+     `Average_Retinal_height[um]` = "Median (IQR)",
+     Retinal_volumeNl = "Median (IQR)",
+     `Maximal_height_of_RPE_irregularities[um]` = "Median (IQR)",
+       `PED volume[nl]` = "Median (IQR)",
+     `Volume_of_RPE_irregularities[nl]` = "Median (IQR)",
+       `AnalyzedEnfaceArea[mm^2]` = "Median (IQR)",
+     `Average_RPE_irregularities_height[um]` = "Median (IQR)",
+     ERMVolumeNl = "Median (IQR)"
+   )) %>% 
+   left_join(va_fl_correlations, by = "Variable") %>% 
+   left_join(noa_dictionary %>% 
+                 select(Parameter, `Raw Parameter`), 
+              by = c("Variable" = "Raw Parameter")) %>% 
+   relocate(Parameter, .after = Variable) %>% 
+     arrange(desc(estimate)) %>% 
+   select(-estimate) %>% 
+   kbl(caption = "Distribution of NOA OCT retinal measurements at baseline, sorted by strength of correlation with visual acuity.") %>% 
+   kable_paper()
+```
+
+```{r fluid-retinal-baseline-by-age}
+fluid_history %>% 
+  filter(baseline) %>% 
+  inner_join(eye, by = c("ID_anon", "EYE")) %>% 
+  select(Age, all_of(noa_retinal)) %>% 
+    mutate(Eyes = " ") %>% 
+   GenerateDescriptives(col_var = Age) %>% 
+   left_join(noa_dictionary %>% 
+                 select(Parameter, `Raw Parameter`), 
+              by = c("Variable" = "Raw Parameter")) %>% 
+   relocate(Parameter, .after = Variable) %>% 
+   kbl(caption = "Distribution of NOA OCT retinal measurements at baseline by age category.") %>% 
+   kable_paper()
+```
+
+```{r fluid-retinal-baseline-by-gender}
+fluid_history %>% 
+  filter(baseline) %>% 
+  inner_join(eye, by = c("ID_anon", "EYE")) %>% 
+  select(GENDER, all_of(noa_retinal)) %>% 
+    mutate(Eyes = " ") %>% 
+   GenerateDescriptives(col_var = GENDER) %>% 
+   left_join(noa_dictionary %>% 
+                 select(Parameter, `Raw Parameter`), 
+              by = c("Variable" = "Raw Parameter")) %>% 
+   relocate(Parameter, .after = Variable) %>% 
+   kbl(caption = "Distribution of NOA OCT retinal measurements at baseline by gender.") %>% 
+   kable_paper()
+```
+
+```{r fluid-grid-plot, fig.cap = "Distribution of retinal fluid at baseline by ETDRS grid region: mean (standard deviation). Thicknesses measured in um, volumes in nl.", fig.height=12, fig.width=8}
+baseline_fluid_grid %>% 
+  filter(str_detect(abbr_metric, "SRF|IRF|TRF")) %>% 
+  PlotETDRSGrid(valform) +
+  facet_wrap(~abbr_metric, ncol = 2)
+```
+
+```{r RPE-grid-plot, fig.cap = "Distribution of RPE irregularities at baseline by ETDRS grid region: mean (standard deviation). Thicknesses measured in um, volumes in nl.", fig.height=4, fig.width=8}
+baseline_fluid_grid %>% 
+  filter(str_detect(abbr_metric, "RPE")) %>% 
+  PlotETDRSGrid(valform) +
+  facet_wrap(~abbr_metric, ncol = 2)
+```
+
+```{r retina-grid-plot, fig.cap = "Distribution of retinal thickness at baseline by ETDRS grid region: mean (standard deviation). Thicknesses measured in um, volumes in nl.", fig.height=4, fig.width=8}
+baseline_fluid_grid %>% 
+  filter(str_detect(abbr_metric, "retina")) %>% 
+  PlotETDRSGrid(valform) +
+  facet_wrap(~abbr_metric, ncol = 2)
+```
+
+```{r fluid-grid-baseline, warning=FALSE}
+fluid_history %>% 
+  filter(baseline) %>% 
+  select(all_of(noa_grid)) %>% 
+    mutate(Eyes = " ") %>% 
+   GenerateDescriptives(type = set_names(rep("Median (IQR)", length(noa_grid)), nm = noa_grid)
+) %>% 
+   left_join(va_fl_correlations, by = "Variable") %>% 
+   left_join(noa_dictionary %>% 
+                 select(Parameter, `Raw Parameter`), 
+              by = c("Variable" = "Raw Parameter")) %>% 
+   relocate(Parameter, .after = Variable) %>% 
+    arrange(desc(estimate)) %>% 
+   select(-estimate) %>% 
+   kbl(caption = "Distribution of NOA OCT fluid and retinal measurements at baseline by ETDRS grid region, sorted by strength of correlation with visual acuity.") %>% 
+   kable_paper()
+```
+
+
+### Eyes with SRF and IRF at baseline
+
+```{r fluid-baseline-srf-irf, warning=FALSE}
+fluid_history %>% 
+  filter(baseline, amd_type == "SRF and IRF") %>% 
+  select(all_of(noa_fluid), `PED volume[nl]`) %>% 
+    mutate(Eyes = " ") %>% 
+   GenerateDescriptives(type = c(SRFVolumeNl = "Median (IQR)",
+                          IRFVolumeNl = "Median (IQR)",
+                          TRFVolumeNl = "Median (IQR)",
+                          `Average_SRF_height[um]` = "Median (IQR)",
+                          `Average_IRF_height[um]` = "Median (IQR)",
+                          `Average_TRF_height[um]` = "Median (IQR)",
+                          `MaxSRF_height[um]` = "Median (IQR)",
+                          `MaxIRF_height[um]` = "Median (IQR)",
+                          `PED volume[nl]` = "Median (IQR)")) %>% 
+  left_join(va_fl_correlations_srf_irf, by = "Variable") %>% 
+   left_join(noa_dictionary %>% 
+                 select(Parameter, `Raw Parameter`), 
+              by = c("Variable" = "Raw Parameter")) %>% 
+   relocate(Parameter, .after = Variable) %>% 
+   arrange(desc(estimate)) %>% 
+   select(-estimate) %>% 
+   kbl(caption = "Distribution of NOA OCT fluid measurements at baseline, sorted by strength of correlation with visual acuity. Eyes with SRF and IRF at baseline.") %>% 
+   kable_paper()
+```
+
+
+```{r fluid-grid-baseline-srf-irf, warning=FALSE}
+fluid_history %>% 
+  filter(baseline, amd_type == "SRF and IRF") %>% 
+  select(all_of(noa_grid)) %>% 
+    mutate(Eyes = " ") %>% 
+   GenerateDescriptives(type = set_names(rep("Median (IQR)", length(noa_grid)), nm = noa_grid)
+) %>% 
+   left_join(va_fl_correlations_srf_irf, by = "Variable") %>% 
+   left_join(noa_dictionary %>% 
+                 select(Parameter, `Raw Parameter`), 
+              by = c("Variable" = "Raw Parameter")) %>% 
+   relocate(Parameter, .after = Variable) %>% 
+    arrange(desc(estimate)) %>% 
+   select(-estimate) %>% 
+   kbl(caption = "Distribution of NOA OCT fluid and retinal measurements at baseline by ETDRS grid region, sorted by strength of correlation with visual acuity. Eyes with SRF and IRF at baseline.") %>% 
+   kable_paper()
+```
