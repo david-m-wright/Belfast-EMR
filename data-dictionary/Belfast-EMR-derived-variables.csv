@@ -1,0 +1,8 @@
+﻿Variable,Description
+va_etdrs,Visual acuity (ETDRS letters)
+va_logmar,Visual acuity (LogMAR)
+va_category_snellen,Visual acuity category (Snellen)
+va_category_etdrs,Visual acuity category (ETDRS letters)
+va_change_logmar,Visual acuity change from baseline (LogMAR)
+va_change_etdrs,Visual acuity change from baseline (ETDRS letters)
+va_change_lines,Visual acuity change from baseline (ETDRS lines)
