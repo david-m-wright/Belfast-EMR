@@ -62,21 +62,41 @@ injection_summary_eye <- injections_raw %>%
 
 
 # Visual acuity
-visual_acuity <- mdc %>% 
-  filter(EVENT == "VA") %>% 
-  select(PatientID, Date, `BCVA OD`, `BCVA OS`) %>% 
-    pivot_longer(cols = c("BCVA OD", "BCVA OS"), 
-                 names_prefix = "BCVA ", 
-                 names_to = "EyeCode",
-                 values_to = "va_logmar") %>% 
-  group_by(PatientID, EyeCode, Date) %>% 
-  slice_head(n = 1)
-  
+visual_acuity <- mdc %>%
+  filter(EVENT == "VA") %>%
+  select(PatientID, Date, `BCVA OD`, `BCVA OS`) %>%
+  pivot_longer(
+    cols = c("BCVA OD", "BCVA OS"),
+    names_prefix = "BCVA ",
+    names_to = "EyeCode",
+    values_to = "va_logmar"
+  ) %>%
+  group_by(PatientID, EyeCode, Date) %>%
+  slice_head(n = 1) %>%
+  ungroup() %>%
+  mutate(
+    va_category_snellen = cut(
+        va_logmar,
+        breaks = c(min(va_logmar, na.rm = TRUE),
+          0.29,
+          0.59,
+          0.99,
+          max(va_logmar, na.rm = TRUE)
+        ),
+        labels = c(
+          "Good (VA>6/12)",
+          "Moderate (6/24 < VA <= 6/12)",
+          "Partially sighted (6/60 < VA <= 6/24)",
+          "Blind (VA <= 6/60)"
+        ),
+        include.lowest = TRUE)
+  )
+ 
 
 # For each visual acuity measurement, calculate the time since the first injection (index_date)
 va_raw <- as.data.table(injection_summary_eye)[, .(PatientID, EyeCode, index_date)][ 
   # Join injection_summary_eye and visual_acuity tables
-  as.data.table(visual_acuity), .(PatientID, EyeCode, index_date, Date, va_logmar), on = .(PatientID, EyeCode)][
+  as.data.table(visual_acuity), .(PatientID, EyeCode, index_date, Date, va_logmar, va_category_snellen), on = .(PatientID, EyeCode)][
     # Calculate months since index date
     , months_since_index:=interval(index_date, Date)/dmonths()][
       # Calculate years ince index date
@@ -126,7 +146,7 @@ eye_raw <- patients_raw %>%
   left_join(va_raw %>%
               # filter(baseline) %>%
                filter(baseline, months_since_index > -1.3 & months_since_index <=0) %>%
-              select(PatientID, EyeCode, va_logmar),
+              select(PatientID, EyeCode, va_logmar, va_category_snellen),
             by = c("PatientID", "EyeCode")) %>% 
   
   
@@ -156,7 +176,10 @@ eye_raw <- patients_raw %>%
     
     # Those without a baseline fluid measurement
     exclude_no_fluid = !fluid_measurement
-  ) 
+  ) %>% 
+  
+  # Add an eye id to allow joining of model predictions with eye attibutes
+  mutate(eye_id = factor(paste(PatientID, EyeCode, sep = "-")))
 
 
 # Check exclusions
@@ -265,6 +288,18 @@ fluid_history <- snapshots[fluid_history_raw, roll = "nearest"][
   , snapshot := .I == .I[which.min(abs(months_since_index - follow_up_month))] &
     months_since_index >= lower_lim &
     months_since_index <= upper_lim, by = c("PatientID", "EyeCode", "follow_up_month")]#[
+
+
+# # Output the fluid history for exploratory analysis
+# fluid_output <- fluid_history %>%
+#   filter(baseline) %>%
+#   inner_join(eye, by = c("PatientID", "EyeCode", "index_date")) %>% 
+#   rename(`First_Inj_Date` = `1st_Inj_Date`) 
+# names(fluid_output) <- str_replace_all(names(fluid_output), "(\\[|\\]|\\(|\\)|[[:space:]])|\\?", "_") 
+# names(fluid_output) <- str_replace_all(names(fluid_output), "\\^|\\=", "")   
+# # write_csv(fluid_output, "//fas8200main-n2/OphBelfast/fluid-history.csv")
+# haven::write_sav(fluid_output, "//fas8200main-n2/OphBelfast/fluid-history.sav")
+
 
 
 treatment_intervals <- injections %>%

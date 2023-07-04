@@ -1,0 +1,31 @@
+---
+title: "BIRAX study - TASMC treatment switching"
+author: "David M Wright - d.wright@qub.ac.uk"
+date: "Document compiled: `r Sys.Date()`"
+output: 
+  bookdown::html_document2:
+     toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(knitr)
+library(kableExtra)
+library(rprojroot)
+library(tidyverse)
+library(broom)
+```
+
+`r R.version.string`   
+
+# Introduction
+
+```{r run-analysis, include=FALSE}
+source(find_rstudio_root_file("Code/TASMC-treatment-switching.R"))
+```
+
+This analysis is of Electronic Medical Records (EMR) from the Tel Aviv Sourasky Medical Centre extracted over the period `r min(mdc$Date)` to `r max(mdc$Date)`. The aim of the study is to investigate the potential for machine learning to identify factors and biomarkers associated with long-term AMD treatment response.
+
+This document describes analysis of the influence of treatment switching from Avastin to other drugs on retinal fluid dynamics.
+
+

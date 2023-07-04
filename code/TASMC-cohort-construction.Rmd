@@ -238,7 +238,7 @@ va_history %>% inner_join(
 ```{r va-baseline}
 va_history %>% 
   filter(baseline) %>% 
-  transmute(va_logmar, Eyes = "n") %>% 
+  transmute(va_logmar, va_category_snellen, Eyes = "n") %>% 
   GenerateDescriptives(type = c(va_logmar = "Median (IQR)")) %>% 
   left_join(var_desc, by = "Variable") %>%
   mutate(Description = coalesce(Description, Variable)) %>%
@@ -255,7 +255,7 @@ fluid_history %>%
 va_history %>% 
   filter(baseline),
 by = c("PatientID", "EyeCode")) %>% 
-  transmute(amd_type, va_logmar, Eyes = "n") %>% 
+  transmute(amd_type, va_logmar, va_category_snellen, Eyes = "n") %>% 
   GenerateDescriptives(col_var = amd_type, type = c(va_logmar = "Median (IQR)")) %>% 
   left_join(var_desc, by = "Variable") %>%
   mutate(Description = coalesce(Description, Variable)) %>%
