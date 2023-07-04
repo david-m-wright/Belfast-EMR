@@ -166,15 +166,43 @@ noa_volumes_selected <- noa %>%
 
 noa_volumes_selected <- noa_volumes
 
-# Impute missing volumes with zero and scale
-fluid_history_imp <- fluid_history_cluster %>% 
-  mutate(across(all_of(noa_volumes), ~scale(if_else(is.na(.), 0, .)))) %>% 
-  arrange(PatientID, EyeCode, months_since_index) %>% 
-  group_by(PatientID, EyeCode) %>% 
-  mutate(oct_series = row_number()) %>% 
-  ungroup() %>% 
-  as.data.table()
+# Impute missing volumes with zero
+# Scale using the mean and standard deviation of the baseline measurements
+# Save the means and sds for scaling the external validation dataset
+imputation_mean_training <- fluid_history_cluster %>% 
+  filter(baseline) %>% 
+  summarise(across(all_of(noa_volumes), ~mean(., na.rm = TRUE))) %>% 
+  unlist()
 
+imputation_sd_training <- fluid_history_cluster %>% 
+  filter(baseline) %>% 
+  summarise(across(all_of(noa_volumes), ~sd(., na.rm = TRUE))) %>% 
+  unlist()
+
+# list(mean_training = imputation_mean_training, 
+#      sd_training = imputation_sd_training) %>% 
+#   write_rds(find_rstudio_root_file("SL-models", "imputation-scaling-values.RDS"))
+
+fluid_history_imp <- bind_cols(
+  fluid_history_cluster %>%
+    select(-all_of(noa_volumes)),
+  
+  fluid_history_cluster %>%
+    select(all_of(noa_volumes)) %>%
+    apply(
+      2,
+      FUN = function(x)
+        if_else(is.na(x), 0, x)
+    ) %>%
+    sweep(2, STATS = imputation_mean_training, FUN = "-") %>%
+    sweep(2, STATS = imputation_sd_training, FUN = "/")
+) %>%
+  
+  arrange(PatientID, EyeCode, months_since_index) %>%
+  group_by(PatientID, EyeCode) %>%
+  mutate(oct_series = row_number()) %>%
+  ungroup() %>%
+  as.data.table()
 
 fluid_baseline_imp <- fluid_history_imp %>% 
   select(cluster, PatientID, EyeCode, oct_series, all_of(noa_volumes_selected)) %>% 

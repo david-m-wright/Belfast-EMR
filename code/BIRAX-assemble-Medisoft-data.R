@@ -85,7 +85,7 @@ diab_status <- diabetes %>%
   summarise(
     DiabetesTypeDesc = MaxVotes(DiabetesTypeDesc),
     # Find youngest age at diagnosis
-    age_diabetes_diagnosed = na_if(min(AgeDiagnosed, na.rm = T), Inf),
+  age_diabetes_diagnosed = na_if(min(as.numeric(AgeDiagnosed), na.rm = T), Inf),
     .groups = "drop"
   )
 

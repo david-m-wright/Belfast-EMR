@@ -34,7 +34,11 @@ demand_task_yr1_6 <- make_sl3_Task(
   outcome = "in_yr_1",
   outcome_type = "continuous",
   id = "PatientID",
-  folds = n_folds
+  # Define the cross-validation scheme
+  folds = origami::make_folds(fluid_6months_imp_demand, 
+                              fold_fun = origami::folds_vfold, 
+                              V = n_folds, 
+                              cluster_ids = fluid_6months_imp_demand$PatientID)
 )
 
 demand_task_yr2_6 <- make_sl3_Task(
@@ -43,7 +47,10 @@ demand_task_yr2_6 <- make_sl3_Task(
   outcome = "in_yr_2",
   outcome_type = "continuous",
   id = "PatientID",
-  folds = n_folds
+  folds = origami::make_folds(fluid_6months_imp_demand, 
+                              fold_fun = origami::folds_vfold, 
+                              V = n_folds, 
+                              cluster_ids = fluid_6months_imp_demand$PatientID)
 )
 
 demand_task_yr3_6 <- make_sl3_Task(
@@ -52,7 +59,10 @@ demand_task_yr3_6 <- make_sl3_Task(
   outcome = "in_yr_3",
   outcome_type = "continuous",
   id = "PatientID",
-  folds = n_folds
+  folds = origami::make_folds(fluid_6months_imp_demand, 
+                              fold_fun = origami::folds_vfold, 
+                              V = n_folds, 
+                              cluster_ids = fluid_6months_imp_demand$PatientID)
 )
 
 # List the demand tasks
@@ -61,6 +71,10 @@ demand_tasks_yrs <- list(demand_task_yr1_6, demand_task_yr2_6, demand_task_yr3_6
 
 # Fit the superlearner
 sl_fit_yrs_6 <- map(demand_tasks_yrs, ~ sl$train(.))
+
+# Save fitted model for external validation
+write_rds(sl_fit_yrs_6, file = find_rstudio_root_file("SL-models", "sl_fit_yrs_6.RDS"))
+# sl_fit_yrs_6 <- read_rds( find_rstudio_root_file("SL-models", "sl_fit_yrs_6-slim.RDS"))
 
 # Calculate the cross validated risk
 sl_fit_yrs_6_cv_risk <-

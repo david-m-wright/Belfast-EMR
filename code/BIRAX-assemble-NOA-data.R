@@ -80,6 +80,7 @@ noa_unsuccessful <-  noa_log_dirs %>%
 # Extract the most recent set of results for each batch
 noa_raw <- noa_log_dirs %>% 
   map_dfr(ReadNOAResults, "Results.csv") %>% 
+  as.data.table() %>% 
   .[, .SD[log_time == min(log_time)], by = batch] %>% 
 # noa_raw <- fread(file.path(file_path, "NOA-output", "Results.csv"),
 #                  na.strings = "nan") %>% 

@@ -21,7 +21,7 @@ library(broom)
 
 # Increase java memory limit before calling bartMachine
 # options(java.parameters = "-Xmx30g") # 30Gb
-options(java.parameters = "-Xmx1g") # 1Gb
+options(java.parameters = "-Xmx10g") # 10Gb
 library(bartMachine)
 
 # Call python environment with SHAP package for force plots of SHAP values
@@ -219,10 +219,10 @@ stack <- Stack$new(sl_learners)
 
 # Make the Super Learner using default meta-learner (solnp)
 # Ensures meta learner is trained on the cross validated predictions
-sl <- Lrnr_sl$new(stack)
+sl <- Lrnr_sl$new(stack, keep_extra = FALSE)
 
 # Number of folds to use for superlearner cross-validation
-n_folds <- 5
+n_folds <- 10
 
 # Extract predictions from superlearner fit and add eye code as another identifier
 # Args:
