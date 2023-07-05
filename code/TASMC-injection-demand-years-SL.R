@@ -7,7 +7,8 @@ set.seed(1983)
 
 # Create sl3 tasks for each year of injections
 demand_task_yr1_6 <- make_sl3_Task(
-  data = filter(fluid_6months_imp_demand, years_observed >=1),
+  # data = filter(fluid_6months_imp_demand, years_observed >=1),
+  data = fluid_6months_imp_demand,
   covariates =  noa_covariates_0_6,
   outcome = "in_yr_1",
   outcome_type = "continuous",
@@ -15,7 +16,8 @@ demand_task_yr1_6 <- make_sl3_Task(
 )
 
 demand_task_yr2_6 <- make_sl3_Task(
-  data = filter(fluid_6months_imp_demand, years_observed >= 2),
+  # data = filter(fluid_6months_imp_demand, years_observed >= 2),
+  data = fluid_6months_imp_demand,
   covariates = noa_covariates_0_6,
   outcome = "in_yr_2",
   outcome_type = "continuous",
@@ -23,7 +25,8 @@ demand_task_yr2_6 <- make_sl3_Task(
 )
 
 demand_task_yr3_6 <- make_sl3_Task(
-  data = filter(fluid_6months_imp_demand, years_observed >= 3),
+  # data = filter(fluid_6months_imp_demand, years_observed >= 3),
+  data = fluid_6months_imp_demand,
   covariates = noa_covariates_0_6,
   outcome = "in_yr_3",
   outcome_type = "continuous",

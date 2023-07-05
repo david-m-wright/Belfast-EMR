@@ -37,9 +37,7 @@ The following outcomes were investigated:
 
 Cohort construction is described in 'TASMC-cohort-construction.html` (`r nrow(eye_demand_raw)` eyes from `r nrow(distinct(eye_demand_raw, PatientID))` patients).
 
-* Excluded `r nrow(filter(eye_demand_raw, exclude_three_yrs_observed))` eyes observed for $<3$ years.  Observation time was from baseline to date of death or date of data extraction, whichever was earlier. This criterion was applied to ensure that each eye was observed for long enough so that the outcomes of interest could be measured.   
-* Excluded `r nrow(filter(eye_demand_raw, !exclude_three_yrs_observed, exclude_fluid_eyes))` eyes with $\leq 3$ fluid measurements in total.    
-* Excluded `r nrow(filter(eye_demand_raw, exclude_three_yrs_observed, !exclude_fluid_eyes, exclude_6months_fluid))` eyes without a fluid measurement at 6 months (+-2 months, Figure \@ref(fig:close-to-snapshot)).    
+* Excluded `r nrow(filter(eye_demand_raw, exclude_6months_fluid))` eyes without a fluid measurement at 6 months (+-2 months, Figure \@ref(fig:close-to-snapshot)).    
 
 A total of `r nrow(eye_demand)` eyes from `r nrow(distinct(eye_demand, PatientID))` patients remained after these exclusions.
 
@@ -117,6 +115,7 @@ bind_rows(
   kbl(caption = "Number of injections and examinations in first three years of treatment.") %>%
   kable_paper()
 ```
+
 
 ## Visual acuity
 
