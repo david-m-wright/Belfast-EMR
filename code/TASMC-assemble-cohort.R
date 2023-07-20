@@ -43,9 +43,10 @@ injections_raw <- mdc %>%
   mutate(index_date = min(Date),
          years_treated = interval(index_date, Date)/dyears(),
          # Year of treatment for each eye starts at 1
-         treatment_year = as.factor(floor(years_treated) + 1)) %>% 
+         treatment_year = as.factor(floor(years_treated) + 1),
+         injection_number = row_number(Date)) %>% 
   ungroup() %>% 
-  select(PatientID, EyeCode, AGE, index_date, Date, EVENT, years_treated, treatment_year)
+  select(PatientID, EyeCode, AGE, index_date, Date, EVENT, injection_number, years_treated, treatment_year)
 
 
 ## Prepare series of measurements over time ##
@@ -56,7 +57,7 @@ injection_summary_eye <- injections_raw %>%
   group_by(PatientID, EyeCode) %>% 
   summarise(index_date = min(Date),
             final_injection_date = max(Date),
-            total_injections = n(), 
+            total_injections = max(injection_number),
             .groups = "drop") %>% 
   mutate(total_intervals = total_injections - 1)
 
@@ -99,7 +100,7 @@ va_raw <- as.data.table(injection_summary_eye)[, .(PatientID, EyeCode, index_dat
   as.data.table(visual_acuity), .(PatientID, EyeCode, index_date, Date, va_logmar, va_category_snellen), on = .(PatientID, EyeCode)][
     # Calculate months since index date
     , months_since_index:=interval(index_date, Date)/dmonths()][
-      # Calculate years ince index date
+      # Calculate years since index date
       , years_since_index := interval(index_date, Date)/dyears()][  
         # Mark baseline measurements (closest measurement to baseline)  
          , baseline := abs(months_since_index) == min(abs(months_since_index)), by = .(PatientID, EyeCode)][
@@ -257,10 +258,12 @@ va_history <- snapshots[va_history_raw, roll = "nearest"][
         , va_change_lines := cut(va_change_logmar, 
                                  breaks = c(min(va_change_logmar, na.rm = TRUE), -0.2, 0.19, max(va_change_logmar, na.rm = TRUE)), 
                                  labels = c("gained >=2 lines", "< 2 lines change", "lost >= 2 lines"), 
-                                 include.lowest = TRUE)][
+                                 include.lowest = TRUE)][, va_change_cat := cut(va_change_logmar, 
+                                                                                breaks = c(min(va_change_logmar, na.rm = TRUE), -0.105, 0.1, max(va_change_logmar, na.rm = TRUE)), 
+                                                                                labels = c("Good (gained >5 letters)", "Partial (-5<=change<=5 letters)", "Non-response (lost > 5 letters)"), 
+                                                                                include.lowest = TRUE)][
                                    # Add the treatment year to match up with injection counts
                                    , treatment_year := as.factor(floor(years_since_index)+1)]
-
 
 
 # Fluid history for each eye

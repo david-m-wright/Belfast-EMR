@@ -1,0 +1,107 @@
+---
+title: "BIRAX study - TASMC descriptive statistics"
+author: "David M Wright - d.wright@qub.ac.uk"
+date: "Document compiled: `r Sys.Date()`"
+output: 
+  bookdown::html_document2:
+     toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(knitr)
+library(kableExtra)
+library(rprojroot)
+library(tidyverse)
+library(broom)
+library(janitor)
+```
+
+`r R.version.string`   
+
+# Introduction
+
+```{r run-analysis, include=FALSE}
+source(find_rstudio_root_file("Code/TASMC-descriptive-statistics.R"))
+```
+
+This analysis is of Electronic Medical Records (EMR) from the Tel Aviv Sourasky Medical Centre extracted over the period `r min(mdc$Date)` to `r max(mdc$Date)`. The aim of the study is to investigate the potential for machine learning to identify factors and biomarkers associated with long-term AMD treatment response.
+
+This document gives descriptive statistics for various sub-groups in the dataset.
+
+# VA change by baseline visual acuity
+
+```{r va-change-by-year}
+# Need to use follow up years rather than treatment years because the snapshots are only defined for these.
+va_history %>% 
+  filter(snapshot,
+         follow_up_year != 0 , follow_up_year != 0.5) %>% 
+  select(va_category_snellen, va_change_logmar, follow_up_year) %>% 
+  group_by(va_category_snellen, follow_up_year) %>% 
+  skim_numeric() %>% 
+  format_skim_numeric(col_var = follow_up_year) %>% 
+  filter(Level %in% c("n", "Mean (SD)")) %>% 
+  arrange(Level) %>% 
+  select(-Variable) %>% 
+  rename(Category = va_category_snellen) %>% 
+  kbl(caption = "Distribution of VA changes (logMAR from baseline) at end of each year of anti-VEGF treatment.") %>% 
+  kable_paper()
+```
+
+```{r va-change-category-by-year}
+va_history %>% 
+  filter(snapshot,
+         follow_up_year != 0 , 
+         follow_up_year != 0.5,
+         !is.na(va_change_cat)) %>% 
+  transmute(va_category_snellen, follow_up_year,  va_change_cat, Eyes = "n") %>% 
+  group_by(va_category_snellen) %>% 
+  nest() %>% 
+  mutate(descr = map(.x = data, ~GenerateDescriptives(.x, col_var = follow_up_year))) %>% 
+  arrange(va_category_snellen) %>% 
+  unnest(descr) %>% 
+  select(-Variable, -data) %>% 
+  
+  kbl(caption = "Distribution of VA change categories (from baseline) at the end of each year of anti-VEGF treatment. Ceiling effects not adjusted for.") %>% 
+  kable_paper()
+```
+
+
+# Phases of functional response
+
+The response to treatment in terms of visual acuity change can be divided into three phases:
+
+* Primary response - measured at the first visit after the third anti-VEGF injection.   
+* Secondary response - measured at the second visit after the third anti-VEGF injection, provided this visit was <12 months since the first injection.   
+* Late response - measured at the first visit in the second year since the first injection. 
+
+The distribution of VA measurements across the phases is given in Figure \@ref(fig:phase-time). Changes in treatment response between phases are described in Tables \@ref(tab:first-transition) and \@ref(tab:second-transition).
+
+
+```{r phase-time, fig.cap="Timing of VA measurements used to represent phases of treatment response.", warning = FALSE, fig.height=3}
+ggplot(va_response, aes(x = years_since_index)) +
+  geom_histogram(bins = 40) +
+  facet_wrap(~response) +
+  xlim(c(0,2)) +
+  theme_light()
+```
+
+
+```{r first-transition}
+va_phases %>% 
+  select(Primary, Secondary) %>% 
+  GenerateDescriptives(col_var = Secondary) %>% 
+  filter(!is.na(Level)) %>% 
+  kbl(caption = "Visual acuity changes relative to baseline in the primary and secondary phases of treatment response. Columns indicate response in the secondary phase.") %>% 
+  kable_paper()
+```
+
+```{r second-transition}
+va_phases %>% 
+  select(Secondary, Late) %>% 
+  GenerateDescriptives(col_var = Late) %>% 
+  filter(!is.na(Level)) %>% 
+  kbl(caption = "Visual acuity changes relative to baseline in the secondary and late phases of treatment response. Columns indicate response in the late phase.") %>% 
+  kable_paper()
+```
+

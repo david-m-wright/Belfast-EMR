@@ -1,7 +1,7 @@
 # Helper functions
 library(janitor)
 library(tidyverse)
-
+library(skimr)
 
 # Function to reformat the intervals produced by cut() into more familiar inequality notation
 # Args: x = character vector to reformat,
@@ -450,3 +450,58 @@ PlotETDRSGrid <- function(dat, label_col){
 
 
 
+# Custom skimmers for dealing with numeric values
+# Mean and sd
+skim_mean_sd <- function(x, sig_digits = 1){
+  paste0(signif(mean(x, na.rm = TRUE), digits = sig_digits), 
+         " (", 
+         signif(sd(x, na.rm = TRUE), digits = sig_digits),
+         ")")
+}
+skim_mean_sd(1:10)
+
+# Median and range
+skim_median_range <- function(x, sig_digits = 1){
+  paste0(signif(median(x, na.rm = T), digits = sig_digits), 
+         " (", 
+         signif(min(x, na.rm = T), digits = sig_digits), 
+         ", ",
+         signif(max(x, na.rm = T), digits = sig_digits), 
+         ")")
+}
+skim_median_range(1:10) 
+
+# Median and IQR
+skim_median_iqr <- function(x, sig_digits = 1){
+  paste0(signif(median(x, na.rm = T), digits = sig_digits), 
+         " (", 
+         signif(quantile(x, probs = c(0.25), na.rm = T), digits = sig_digits), 
+         ", ",
+         signif(quantile(x, probs = c(0.75), na.rm = T), digits = sig_digits), 
+         ")")
+}
+skim_median_iqr(1:10) 
+
+# Custom skimmer list for numeric values
+skim_numeric <- skim_with(base = sfl(n = ~ as.character(n_complete(.))),
+                          numeric = sfl(
+                            `Mean (SD)` = ~ skim_mean_sd(., sig_digits = 2),
+                            `Median (Range)` = skim_median_range,
+                            `Median (IQR)` = skim_median_iqr,
+                            mean = NULL,
+                            sd = NULL,
+                            p0  = NULL,
+                            p25 = NULL,
+                            p50  = NULL ,
+                            p75 = NULL,
+                            p100 = NULL,
+                            hist = NULL)
+)
+
+# Function to format the output from skim_numeric()
+format_skim_numeric <- function(x, col_var) {x %>% 
+    yank("numeric") %>% 
+    rename(Variable = "skim_variable") %>% 
+    pivot_longer(cols = c(n, `Mean (SD)`, `Median (Range)`, `Median (IQR)`), names_to = "Level") %>% 
+    pivot_wider(names_from = {{col_var}}, values_from = value) 
+}

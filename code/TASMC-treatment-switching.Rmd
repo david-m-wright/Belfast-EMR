@@ -21,7 +21,7 @@ library(broom)
 # Introduction
 
 ```{r run-analysis, include=FALSE}
-source(find_rstudio_root_file("Code/TASMC-treatment-switching.R"))
+# source(find_rstudio_root_file("Code/TASMC-treatment-switching.R"))
 ```
 
 This analysis is of Electronic Medical Records (EMR) from the Tel Aviv Sourasky Medical Centre extracted over the period `r min(mdc$Date)` to `r max(mdc$Date)`. The aim of the study is to investigate the potential for machine learning to identify factors and biomarkers associated with long-term AMD treatment response.
