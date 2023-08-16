@@ -26,10 +26,17 @@ mdc_raw <- read_csv("//fas8200main-n2/OphBelfast/MDC_Updated_16062023_anon_david
   filter(!is.na(Date),
          !is.na(AGE))
 
+
 # Exclude research patients and those first treated during Covid
 mdc <- mdc_raw %>% 
   filter(!exclude_research_patient,
          !exclude_covid)
+
+# List of patients with exclusion criteria
+ # mdc_raw %>% 
+ #   distinct(PatientID, exclude_research_patient, exclude_covid) %>% 
+ #   write_csv(paste0("//fas8200main-n2/OphBelfast/TASMC-extracts/patient-level-exclusions-", Sys.Date(), ".csv"))
+  
 
 # Patient details
 patients_raw <- mdc %>% 
@@ -38,7 +45,7 @@ patients_raw <- mdc %>%
 
 # Find date of first injection for each eye (index_date) and calculate treatment intervals
 injections_raw <- mdc %>% 
-  filter(EVENT %in% c("AVASTIN", "EYLEA", "LUCENTIS")) %>% 
+  filter(EVENT %in% c("AVASTIN", "EYLEA", "LUCENTIS", "INJ")) %>% 
   group_by(PatientID, EyeCode) %>% 
   mutate(index_date = min(Date),
          years_treated = interval(index_date, Date)/dyears(),
@@ -189,12 +196,18 @@ eye_raw %>%
 eye_raw %>% count(exclude_no_va)
 
 
+# List of eyes with exclusion criteria
+# eye_raw %>%
+#   select(PatientID, EyeCode, exclude_age, exclude_lt3_injections, exclude_no_fluid) %>%
+#   write_csv(paste0("//fas8200main-n2/OphBelfast/TASMC-extracts/eye-level-exclusions-", Sys.Date(), ".csv"))
+
+
 # Apply the exclusion criteria
 # Retain those with no baseline VA for use in other analyses
 eye <- eye_raw %>% 
   filter(!exclude_age, 
          !exclude_lt3_injections, 
-         !exclude_no_intervals, 
+         # !exclude_no_intervals, 
          # !exclude_no_va, 
          !exclude_no_fluid) %>% 
   select(-matches("exclude")) %>% 
@@ -302,6 +315,14 @@ fluid_history <- snapshots[fluid_history_raw, roll = "nearest"][
 # names(fluid_output) <- str_replace_all(names(fluid_output), "\\^|\\=", "")   
 # # write_csv(fluid_output, "//fas8200main-n2/OphBelfast/fluid-history.csv")
 # haven::write_sav(fluid_output, "//fas8200main-n2/OphBelfast/fluid-history.sav")
+
+# fluid_output <- fluid_history %>%
+#   inner_join(eye, by = c("PatientID", "EyeCode", "index_date")) %>% 
+#   rename(`First_Inj_Date` = `1st_Inj_Date`) 
+# names(fluid_output) <- str_replace_all(names(fluid_output), "(\\[|\\]|\\(|\\)|[[:space:]])|\\?", "_") 
+# names(fluid_output) <- str_replace_all(names(fluid_output), "\\^|\\=", "")   
+# # write_csv(fluid_output, "//fas8200main-n2/OphBelfast/fluid-history.csv")
+# haven::write_sav(fluid_output, "//fas8200main-n2/OphBelfast/fluid-history-complete.sav")
 
 
 
