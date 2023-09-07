@@ -30,7 +30,7 @@ This document describes construction of the analysis cohort.
 
 # Data sources
 
-Three data files were provided, `MDC_Updated_16062023_anon_david.xslx` contained the clinical records of all injections, OCT scans and VA measurements (MD Clone data). `Notal+MDC with additional IDs 16062023_anon_david.xslx` and `Results Notal_with original IDs_and_anon_185.xslx` contained the fluid measurements derived from OCT scans using the Notal Ophthalmic Analyser (NOA). All files were converted to .csv format before further processing.
+Two data files were provided, `MDC_2023-08-31_filtered_id_anon.xslx` contained the clinical records of all injections, OCT scans and VA measurements (MD Clone data). `Notal+MDC_2023-08-31_filtered_id_anon.xslx` contained the fluid measurements derived from OCT scans using the Notal Ophthalmic Analyser (NOA). All files were converted to .csv format before further processing.
 
  
 # Cohort construction
@@ -67,15 +67,16 @@ Fluid measurements
 
 EMR for a total of `r nrow(distinct(mdc_raw, PatientID))` patients were included in the extracted dataset, with `r nrow(injections_raw)` records of anti-VEGF injections. The unit of analysis is the eye but some criteria were applied at the patient level:   
 
-* Excluded `r nrow(filter(distinct(mdc_raw, PatientID, exclude_research_patient, exclude_covid), exclude_research_patient))` patients that were involved in a clinical trial and so received different treatments from the majority of patients.     
-* Excluded `r nrow(filter(distinct(mdc_raw, PatientID, exclude_research_patient, exclude_covid), !exclude_research_patient, exclude_covid))` patients that were first treated during the Covid pandemic, a substantially different group of patients.    
+* Excluded `r nrow(filter(distinct(mdc_raw, PatientID, exclude_research_patient), exclude_research_patient))` patients that were involved in a clinical trial and so received different treatments from the majority of patients.     
 
 At the eye level:   
 
 * The raw data contained `r nrow(eye_raw)` eyes.   
 * `r nrow(filter(eye_raw, exclude_age))` eyes were in patients aged <50 at the index date and were excluded.
-* `r nrow(filter(eye_raw, !exclude_age, exclude_lt3_injections))` eyes had fewer than three anti-VEGF injections during the study period  and were excluded.   
-* `r nrow(filter(eye_raw, !exclude_age,  !exclude_lt3_injections, exclude_no_fluid))` eyes did not have a retinal fluid measurement within 40 days prior to or including the index date and were excluded.   
+* Excluded `r nrow(filter(eye_raw, !exclude_age, exclude_covid))` eyes that were first treated during the Covid pandemic, and received  substantially different monitoring.     
+* Excluded `r nrow(filter(eye_raw, !exclude_age, !exclude_covid, exclude_non_naive))` eyes that were deemed to have been treated previously (i.e. at another medical centre) at the date of first recorded anti-VEGF injection.     
+* `r nrow(filter(eye_raw, !exclude_age, !exclude_covid, !exclude_non_naive, exclude_lt3_injections))` eyes had fewer than three anti-VEGF injections during the study period  and were excluded.   
+* `r nrow(filter(eye_raw, !exclude_age, !exclude_covid, !exclude_non_naive, !exclude_lt3_injections, exclude_no_fluid))` eyes did not have a retinal fluid measurement within 40 days prior to or including the index date and were excluded.   
 
 A total of `r nrow(eye)` eyes from `r nrow(distinct(eye, PatientID))` patients remained after these exclusions. A total of `r nrow(injections)` injections were observed for the cohort, allowing `r nrow(treatment_intervals)` treatment intervals to be observed (between injections). 
 

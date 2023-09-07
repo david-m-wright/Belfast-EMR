@@ -34,12 +34,13 @@ noa_grid <- noa_dictionary %>%
 
 noa_raw <- bind_rows(
   # Patients with possible comordbidities visible on the OCTs (e.g. vein occlusion)
-  read_csv("//fas8200main-n2/OphBelfast/Results Notal_with original IDs_and_anon_185.csv") %>% 
-    select(-ID) %>% 
-    mutate(comorbidity = TRUE),
+  # read_csv("//fas8200main-n2/OphBelfast/Results Notal_with original IDs_and_anon_185.csv") %>% 
+  read_csv("//fas8200main-n2/OphBelfast/Final for analysis/Notal+MDC_2023-08-31_filtered_id_anon.csv") %>%   
+    # select(-ID) %>% 
+    # mutate(comorbidity = TRUE),
   # Patients with no comorbidities
-  read_csv("//fas8200main-n2/OphBelfast/Notal+MDC with additional IDs 16062023_anon_david.csv") %>% 
-  mutate(comorbidity = FALSE) %>% 
+  # read_csv("//fas8200main-n2/OphBelfast/Notal+MDC with additional IDs 16062023_anon_david.csv") %>% 
+  # mutate(comorbidity = FALSE) %>% 
   rename_with(.fn = ~str_replace(., "\\(um\\)", "[um]")) %>%
   rename_with(.fn = ~str_replace(., "\\(nl\\)", "[nl]")) %>% 
   rename_with(.fn = ~str_replace(., "\\(mm\\^2\\)", "[mm\\^2]"))

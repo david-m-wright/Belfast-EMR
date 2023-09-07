@@ -14,23 +14,23 @@ source(rprojroot::find_rstudio_root_file("code/TASMC-assemble-NOA-data.R"))
 var_desc <- read_csv(find_rstudio_root_file("data-dictionary/Belfast-EMR-derived-variables.csv"))
 
 # Load the clinical data (MD Clone)
-mdc_raw <- read_csv("//fas8200main-n2/OphBelfast/MDC_Updated_16062023_anon_david.csv") %>%
-  rename(PatientID = ID_anon, 
+# mdc_raw <- read_csv("//fas8200main-n2/OphBelfast/MDC_Updated_16062023_anon_david.csv") %>%
+mdc_raw <- read_csv("//fas8200main-n2/OphBelfast/Final for analysis/MDC_2023-08-31_filtered_id_anon.csv") %>%
+      rename(PatientID = ID_anon, 
          EyeCode = EYE,
          Gender = GENDER) %>% 
-  mutate(Date = dmy(Date),
-         exclude_research_patient = is.na(`Is_RP_Flg RP= Research patients 1=Yes 0=No`)|  
-           `Is_RP_Flg RP= Research patients 1=Yes 0=No` == 1,
-         exclude_covid = `Is_Pre_COVID_Flg  1=Yes 0=No` == 0) %>% 
+  mutate(Date = as.Date(Date),
+         exclude_research_patient = Is_RP_Fig==1,
+         exclude_covid = POST_COVID_BY_EYE == 1,
+         exclude_non_naive = `Is not naïve (1=not naïve)` == 1) %>% 
   mutate(across(Gender, as.factor)) %>% 
   filter(!is.na(Date),
          !is.na(AGE))
 
 
-# Exclude research patients and those first treated during Covid
+# Exclude research patients 
 mdc <- mdc_raw %>% 
-  filter(!exclude_research_patient,
-         !exclude_covid)
+  filter(!exclude_research_patient)
 
 # List of patients with exclusion criteria
  # mdc_raw %>% 
@@ -47,13 +47,14 @@ patients_raw <- mdc %>%
 injections_raw <- mdc %>% 
   filter(EVENT %in% c("AVASTIN", "EYLEA", "LUCENTIS", "INJ")) %>% 
   group_by(PatientID, EyeCode) %>% 
+  distinct(PatientID, EyeCode, AGE,  Date, EVENT, exclude_non_naive) %>% 
   mutate(index_date = min(Date),
          years_treated = interval(index_date, Date)/dyears(),
          # Year of treatment for each eye starts at 1
          treatment_year = as.factor(floor(years_treated) + 1),
-         injection_number = row_number(Date)) %>% 
-  ungroup() %>% 
-  select(PatientID, EyeCode, AGE, index_date, Date, EVENT, injection_number, years_treated, treatment_year)
+         injection_number = row_number(Date)
+         ) %>% 
+  ungroup()
 
 
 ## Prepare series of measurements over time ##
@@ -132,11 +133,22 @@ fluid_raw <- as.data.table(injection_summary_eye)[
 
 eye_raw <- patients_raw %>% 
   
+  # Eye level exclusions due to first treatment during covid or previous treatment elsewhere (non-naive)
+  inner_join(mdc %>% 
+  distinct(PatientID, EyeCode, exclude_covid),
+    by = "PatientID") %>% 
+  
+  # Flag eyes deemed non-naive at first injections (had received injections elsewhere)
+  left_join(injections_raw %>% 
+    filter(injection_number == 1) %>% 
+    select(PatientID, EyeCode, exclude_non_naive),
+    by = c("PatientID", "EyeCode")) %>% 
+  
   # Extract age at first injection (index date)
   inner_join(injections_raw %>% 
               filter(Date == index_date) %>% 
             select(PatientID, EyeCode, index_age = AGE),
-            by = "PatientID", multiple = "all") %>% 
+            by = c("PatientID", "EyeCode")) %>% 
   
   # Calculate years treated (index to final injection)
   left_join(injection_summary_eye, by = c("PatientID", "EyeCode")) %>% 
@@ -209,7 +221,10 @@ eye <- eye_raw %>%
          !exclude_lt3_injections, 
          # !exclude_no_intervals, 
          # !exclude_no_va, 
-         !exclude_no_fluid) %>% 
+         !exclude_no_fluid,
+         !exclude_covid,
+         !exclude_non_naive
+         ) %>% 
   select(-matches("exclude")) %>% 
   
   # Derived variable categorising index age into decades
