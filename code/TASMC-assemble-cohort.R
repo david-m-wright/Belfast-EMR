@@ -34,7 +34,7 @@ mdc <- mdc_raw %>%
 
 # List of patients with exclusion criteria
  # mdc_raw %>% 
- #   distinct(PatientID, exclude_research_patient, exclude_covid) %>% 
+ #   distinct(PatientID, exclude_research_patient) %>% 
  #   write_csv(paste0("//fas8200main-n2/OphBelfast/TASMC-extracts/patient-level-exclusions-", Sys.Date(), ".csv"))
   
 
@@ -125,6 +125,8 @@ fluid_raw <- as.data.table(injection_summary_eye)[
     as.data.table(noa), on = .(PatientID, EyeCode)][
       # Calculate months since index date
       , months_since_index:=interval(index_date, DATE)/dmonths()][
+        # Calculate years since index date
+          , years_since_index := interval(index_date, DATE)/dyears()][
         # Mark baseline measurements (closest measurement to baseline)  
         , baseline := abs(months_since_index) == min(abs(months_since_index)), by = .(PatientID, EyeCode)]
 
@@ -318,7 +320,9 @@ setkey(fluid_history_raw, months_since_index)
 fluid_history <- snapshots[fluid_history_raw, roll = "nearest"][
   , snapshot := .I == .I[which.min(abs(months_since_index - follow_up_month))] &
     months_since_index >= lower_lim &
-    months_since_index <= upper_lim, by = c("PatientID", "EyeCode", "follow_up_month")]#[
+    months_since_index <= upper_lim, by = c("PatientID", "EyeCode", "follow_up_month")][
+  # Add the treatment year to match up with injection counts
+  , treatment_year := as.factor(floor(years_since_index)+1)]
 
 
 # # Output the fluid history for exploratory analysis

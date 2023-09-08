@@ -485,14 +485,14 @@ skim_median_iqr(1:10)
 # Custom skimmer list for numeric values
 skim_numeric <- skim_with(base = sfl(n = ~ as.character(n_complete(.))),
                           numeric = sfl(
-                            `Mean (SD)` = ~ skim_mean_sd(., sig_digits = 2),
-                            `Median (Range)` = skim_median_range,
-                            `Median (IQR)` = skim_median_iqr,
+                            `Mean (SD)` = ~ skim_mean_sd(., sig_digits = 3),
+                            `Median (Range)` = ~skim_median_range(., sig_digits = 3),
+                            `Median (IQR)` = ~skim_median_iqr(., sig_digits = 3),
                             mean = NULL,
                             sd = NULL,
                             p0  = NULL,
                             p25 = NULL,
-                            p50  = NULL ,
+                            p50  = NULL,
                             p75 = NULL,
                             p100 = NULL,
                             hist = NULL)

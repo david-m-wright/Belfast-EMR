@@ -29,22 +29,28 @@ This analysis is of Electronic Medical Records (EMR) from the Tel Aviv Sourasky 
 
 This document gives descriptive statistics for various sub-groups in the dataset.
 
-# VA change by baseline visual acuity
+# VA change by baseline visual acuity{#VA-section}
 
 ```{r va-change-by-year}
 # Need to use follow up years rather than treatment years because the snapshots are only defined for these.
 va_history %>% 
+  filter(baseline & snapshot) %>% 
+  select(PatientID, EyeCode, va_category_snellen) %>% 
+  inner_join(
+va_history %>% 
   filter(snapshot,
          follow_up_year != 0 , follow_up_year != 0.5) %>% 
-  select(va_category_snellen, va_change_logmar, follow_up_year) %>% 
+  select(PatientID, EyeCode, va_change_logmar, follow_up_year),
+by = c("PatientID", "EyeCode")) %>% 
+  select(-PatientID, -EyeCode) %>% 
   group_by(va_category_snellen, follow_up_year) %>% 
   skim_numeric() %>% 
   format_skim_numeric(col_var = follow_up_year) %>% 
   filter(Level %in% c("n", "Mean (SD)")) %>% 
   arrange(Level) %>% 
   select(-Variable) %>% 
-  rename(Category = va_category_snellen) %>% 
-  kbl(caption = "Distribution of VA changes (logMAR from baseline) at end of each year of anti-VEGF treatment.") %>% 
+  rename(`Baseline VA Category` = va_category_snellen) %>% 
+  kbl(caption = "Distribution of VA changes (logMAR from baseline) at end of each year of anti-VEGF treatment by baseline VA category.") %>% 
   kable_paper()
 ```
 
@@ -61,7 +67,8 @@ va_history %>%
   arrange(va_category_snellen) %>% 
   unnest(descr) %>% 
   select(-Variable, -data) %>% 
-  
+  rename(`Baseline VA Category` = va_category_snellen) %>% 
+  rename(`Change category` = Level) %>% 
   kbl(caption = "Distribution of VA change categories (from baseline) at the end of each year of anti-VEGF treatment. Ceiling effects not adjusted for.") %>% 
   kable_paper()
 ```
@@ -75,7 +82,7 @@ The response to treatment in terms of visual acuity change can be divided into t
 * Secondary response - measured at the second visit after the third anti-VEGF injection, provided this visit was <12 months since the first injection.   
 * Late response - measured at the first visit in the second year since the first injection. 
 
-The distribution of VA measurements across the phases is given in Figure \@ref(fig:phase-time). Changes in treatment response between phases are described in Tables \@ref(tab:first-transition) and \@ref(tab:second-transition).
+The distribution of VA measurements across the phases is given in Figure \@ref(fig:phase-time). Changes in treatment response between phases are described in Tables \@ref(tab:first-transition) and \@ref(tab:second-transition). Due to the timing of some of the events, not all eyes can be assigned a complete set of phases, hence the 'NA' columns.
 
 
 ```{r phase-time, fig.cap="Timing of VA measurements used to represent phases of treatment response.", warning = FALSE, fig.height=3}
@@ -92,6 +99,8 @@ va_phases %>%
   select(Primary, Secondary) %>% 
   GenerateDescriptives(col_var = Secondary) %>% 
   filter(!is.na(Level)) %>% 
+  select(-Variable) %>% 
+  rename(`Primary response` = Level) %>% 
   kbl(caption = "Visual acuity changes relative to baseline in the primary and secondary phases of treatment response. Columns indicate response in the secondary phase.") %>% 
   kable_paper()
 ```
@@ -101,7 +110,164 @@ va_phases %>%
   select(Secondary, Late) %>% 
   GenerateDescriptives(col_var = Late) %>% 
   filter(!is.na(Level)) %>% 
+  select(-Variable) %>% 
+  rename(`Secondary response` = Level) %>% 
   kbl(caption = "Visual acuity changes relative to baseline in the secondary and late phases of treatment response. Columns indicate response in the late phase.") %>% 
+  kable_paper()
+```
+
+# Fluid response by baseline fluid characteristics
+
+The same classification of response phases was used to [this section](#VA-section).
+
+```{r fluid-phase-time, fig.cap="Timing of fluid measurements used to represent phases of treatment response.", warning = FALSE, fig.height=3}
+ggplot(fluid_response, aes(x = years_since_index)) +
+  geom_histogram(bins = 40) +
+  facet_wrap(~response) +
+  xlim(c(0,2)) +
+  theme_light()
+```
+
+```{r fluid-first-transition}
+fluid_phases %>% 
+  select(Primary, Secondary) %>% 
+  GenerateDescriptives(col_var = Secondary) %>% 
+  filter(!is.na(Level)) %>% 
+    select(-Variable) %>% 
+  rename(`Primary response` = Level) %>% 
+  kbl(caption = "Fluid changes relative to baseline in the primary and secondary phases of treatment response. Columns indicate response in the secondary phase.") %>% 
+  kable_paper()
+```
+
+```{r fluid-second-transition}
+fluid_phases %>% 
+  select(Primary, Secondary) %>% 
+  GenerateDescriptives(col_var = Secondary) %>% 
+  filter(!is.na(Level)) %>% 
+    select(-Variable) %>% 
+  rename(`Primary response` = Level) %>% 
+  kbl(caption = "Fluid changes relative to baseline in the primary and secondary phases of treatment response. Columns indicate response in the late phase.") %>% 
+  kable_paper()
+```
+
+
+```{r fl-response-amd-type}
+fluid_history %>% 
+  filter(baseline, amd_type != "No fluid") %>% 
+  select(PatientID, EyeCode, baseline, amd_type, one_of(noa_fluid)) %>% 
+  inner_join(fluid_response %>% 
+             select(PatientID, EyeCode, response, fl_response), by = c("PatientID", "EyeCode")) %>% 
+  select(-IRF, -SRF, -Fluid, -PatientID) %>% 
+  group_by(amd_type, response, fl_response) %>% 
+  skim_numeric() %>% 
+  format_skim_numeric(col_var = fl_response) %>% 
+  # filter(Level == "Median (IQR)" | (Level == "n" & Variable == "SRFVolumeNl")) %>% 
+  filter(Level == "Median (IQR)") %>% 
+  mutate(Variable = if_else(Level == "n", "Eyes", Variable)) %>% 
+  arrange(amd_type, Variable, response, Level) %>% 
+  select(Variable, amd_type, response, Level, Good, Partial, `Non-responder`) %>% 
+  kbl(caption ="Baseline fluid measurements by response and phase after treatment.") %>% 
+  kable_paper()
+```
+
+
+Figures \@ref(fig:first-resolution-injections) and \@ref(fig:first-resolution-time) and Table \@ref(tab:first-resolution-stats) do not include those where fluid never resolved.
+
+```{r first-resolution-injections, fig.cap="Number of injections required to achieve fluid resolution."}
+first_resolution %>% 
+  ggplot(aes(x = injection_number)) + 
+  geom_bar() +
+  theme_light()
+```
+```{r first-resolution-time, fig.cap="Time required to achieve fluid resolution."}
+first_resolution %>% 
+  ggplot(aes(x = months_since_index)) + 
+  geom_histogram(bins = 40) +
+  theme_light()
+```
+
+```{r first-resolution-stats}
+first_resolution %>% 
+  transmute(cc ="Value", injection_number, months_since_index) %>% 
+  group_by(cc) %>% 
+  skim_numeric() %>% 
+  format_skim_numeric(col_var = cc) %>% 
+  filter(Level %in% c("n", "Median (IQR)", "Mean (SD)")) %>% 
+  kbl(caption = "Time and number injections required to achieve fluid resolution.") %>% 
+  kable_paper()
+```
+
+
+# Number of annual injections
+
+The number of injections per year was calculated across treatment years 2 and 3 (i.e. total number of injections / 2). This rate was categorised into three groups and used to classify various outcomes.
+
+
+```{r inj-by-year-baseline-va}
+injections_per_yr %>% 
+  inner_join(va_history, by = c("PatientID", "EyeCode")) %>% 
+  filter(baseline) %>% 
+  transmute(injections_per_yr_grp, va_logmar, va_category_snellen, Eyes = "n") %>% 
+  GenerateDescriptives(col_var = injections_per_yr_grp, type = c(va_logmar = "Median (IQR)")) %>% 
+  kbl(caption = "VA at baseline by number of injections per year in years 2-3 (aggregated).") %>% 
+  kable_paper()
+```
+
+```{r inj-by-year-baseline-fluid-status}
+injections_per_yr %>% 
+  inner_join(fluid_history, by = c("PatientID", "EyeCode")) %>% 
+  filter(baseline) %>% 
+  select(injections_per_yr_grp, amd_type) %>% 
+  GenerateDescriptives(col_var = injections_per_yr_grp) %>% 
+  select(-Variable) %>% 
+  rename(`AMD type` = Level) %>% 
+  kbl(caption = "AMD type at baseline (SRF/IRF status) by number of injections per year in years 2-3 (aggregated).") %>% 
+  kable_paper()
+```
+
+
+```{r inj-by-year-baseline-fluid}
+injections_per_yr %>% 
+  inner_join(fluid_history, by = c("PatientID", "EyeCode")) %>% 
+  filter(baseline) %>% 
+  select(injections_per_yr_grp, one_of(noa_fluid)) %>% 
+  select(-IRF, -SRF, -Fluid) %>% 
+  group_by(injections_per_yr_grp) %>% 
+  skim_numeric() %>% 
+  format_skim_numeric(col_var = injections_per_yr_grp) %>% 
+  filter(Level == "Median (IQR)" | (Level == "n" & Variable == "SRFVolumeNl")) %>% 
+  mutate(Variable = if_else(Level == "n", "Eyes", Variable)) %>% 
+  arrange(Level) %>% 
+  kbl(caption = "Baseline fluid measurements by number of injections per year in years 2-3 (aggregated).") %>% 
+  kable_paper()
+
+```
+
+```{r injections-by-year}
+injections_per_yr %>% 
+  left_join(injections_yr1, by = c("PatientID", "EyeCode")) %>% 
+  select(injections_per_yr_grp, injections_yr1) %>% 
+  group_by(injections_per_yr_grp) %>% 
+  skim_numeric() %>% 
+  format_skim_numeric(col_var = injections_per_yr_grp) %>% 
+  filter(Level %in% c("n", "Median (IQR)")) %>% 
+  arrange(Level) %>% 
+  select(-Variable) %>% 
+  mutate(Level = if_else(Level == "n", "Eyes", Level)) %>% 
+  kbl(caption = "Number of injections in the first year by number of injections per year in years 2-3 (aggregated).") %>% 
+  kable_paper()
+```
+
+
+```{r inj-by-year-response}
+injections_per_yr %>% 
+  inner_join(va_phases, by = c("PatientID", "EyeCode")) %>% 
+  filter(!is.na(Primary)) %>% 
+  select(injections_per_yr_grp, Primary) %>% 
+  GenerateDescriptives(col_var = injections_per_yr_grp) %>% 
+  select(-Variable) %>% 
+  rename(`Primary response` = Level) %>% 
+  kbl(caption = "Initial treatment response (primary phase) by number of injections per year in years 2-3 (aggregated).") %>% 
   kable_paper()
 ```
 
