@@ -47,8 +47,8 @@ noa_log_dirs <- file.path(file_path, "NOA-output") %>%
 ReadNOAResults <- function(x, file_type) {
   results_file <- file.path(x, file_type, fsep ="")
     fread(results_file, na.strings = "nan") %>% 
-    mutate(logname = str_extract(dirname(results_file), "batch[0-9]{1,2}(.)*")) %>%
-    separate(col = logname, into = c("batch", "log", "d", "m", "y", "h", "min", "s"), remove = TRUE) %>%
+    mutate(logname = str_extract(dirname(results_file), "(BIRAX|RT)-batch[0-9]{1,2}(.)*")) %>%
+    separate(col = logname, into = c("cohort", "batch", "log", "d", "m", "y", "h", "min", "s"), remove = TRUE) %>%
     mutate(log_time = dmy_hms(paste(d, m, y, h, min, s, sep = "-"))) %>% 
       select(-log, -d, -m, -y, -h, -min, -s)
     }
@@ -81,7 +81,7 @@ noa_unsuccessful <-  noa_log_dirs %>%
 noa_raw <- noa_log_dirs %>% 
   map_dfr(ReadNOAResults, "Results.csv") %>% 
   as.data.table() %>% 
-  .[, .SD[log_time == min(log_time)], by = batch] %>% 
+  .[, .SD[log_time == min(log_time)], by = c("cohort", "batch")] %>% 
 # noa_raw <- fread(file.path(file_path, "NOA-output", "Results.csv"),
 #                  na.strings = "nan") %>% 
   separate(FileName, into = c("PatientID", "EyeCode", "OCTDate", "OCTSequence"), sep = "_", remove = FALSE) %>% 

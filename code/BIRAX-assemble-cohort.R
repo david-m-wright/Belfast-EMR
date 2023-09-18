@@ -114,8 +114,9 @@ fluid_raw <- as.data.table(injection_summary_eye)[
     # Calculate months since index date
     , months_since_index:=as.interval(index_date, OCTDate)/dmonths()][
     # Mark baseline measurements (closest measurement to baseline)  
-    , baseline := abs(months_since_index) == min(abs(months_since_index)), by = .(PatientID, EyeCode)]
-
+    , baseline := abs(months_since_index) == min(abs(months_since_index)), by = .(PatientID, EyeCode)][
+  # Set an OCT scan sequence variable independent of injection sequence
+  , oct_scan_number := seq_len(.N), by = .(PatientID, EyeCode)] 
 
 # Find final contact of each individual across VA, OCT thickness and fluid measurements
 # This will be the end of observation
