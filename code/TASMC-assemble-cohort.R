@@ -14,22 +14,29 @@ source(rprojroot::find_rstudio_root_file("code/TASMC-assemble-NOA-data.R"))
 var_desc <- read_csv(find_rstudio_root_file("data-dictionary/Belfast-EMR-derived-variables.csv"))
 
 # Load the clinical data (MD Clone)
-mdc_raw <- read_csv("//fas8200main-n2/OphBelfast/MDC_Updated_16062023_anon_david.csv") %>%
-  rename(PatientID = ID_anon, 
+# mdc_raw <- read_csv("//fas8200main-n2/OphBelfast/MDC_Updated_16062023_anon_david.csv") %>%
+mdc_raw <- read_csv("//fas8200main-n2/OphBelfast/Final for analysis/MDC_2023-08-31_filtered_id_anon.csv") %>%
+      rename(PatientID = ID_anon, 
          EyeCode = EYE,
          Gender = GENDER) %>% 
-  mutate(Date = dmy(Date),
-         exclude_research_patient = is.na(`Is_RP_Flg RP= Research patients 1=Yes 0=No`)|  
-           `Is_RP_Flg RP= Research patients 1=Yes 0=No` == 1,
-         exclude_covid = `Is_Pre_COVID_Flg  1=Yes 0=No` == 0) %>% 
+  mutate(Date = as.Date(Date),
+         exclude_research_patient = Is_RP_Fig==1,
+         exclude_covid = POST_COVID_BY_EYE == 1,
+         exclude_non_naive = `Is not naïve (1=not naïve)` == 1) %>% 
   mutate(across(Gender, as.factor)) %>% 
   filter(!is.na(Date),
          !is.na(AGE))
 
-# Exclude research patients and those first treated during Covid
+
+# Exclude research patients 
 mdc <- mdc_raw %>% 
-  filter(!exclude_research_patient,
-         !exclude_covid)
+  filter(!exclude_research_patient)
+
+# List of patients with exclusion criteria
+ # mdc_raw %>% 
+ #   distinct(PatientID, exclude_research_patient) %>% 
+ #   write_csv(paste0("//fas8200main-n2/OphBelfast/TASMC-extracts/patient-level-exclusions-", Sys.Date(), ".csv"))
+  
 
 # Patient details
 patients_raw <- mdc %>% 
@@ -38,14 +45,16 @@ patients_raw <- mdc %>%
 
 # Find date of first injection for each eye (index_date) and calculate treatment intervals
 injections_raw <- mdc %>% 
-  filter(EVENT %in% c("AVASTIN", "EYLEA", "LUCENTIS")) %>% 
+  filter(EVENT %in% c("AVASTIN", "EYLEA", "LUCENTIS", "INJ")) %>% 
   group_by(PatientID, EyeCode) %>% 
+  distinct(PatientID, EyeCode, AGE,  Date, EVENT, exclude_non_naive) %>% 
   mutate(index_date = min(Date),
          years_treated = interval(index_date, Date)/dyears(),
          # Year of treatment for each eye starts at 1
-         treatment_year = as.factor(floor(years_treated) + 1)) %>% 
-  ungroup() %>% 
-  select(PatientID, EyeCode, AGE, index_date, Date, EVENT, years_treated, treatment_year)
+         treatment_year = as.factor(floor(years_treated) + 1),
+         injection_number = row_number(Date)
+         ) %>% 
+  ungroup()
 
 
 ## Prepare series of measurements over time ##
@@ -56,7 +65,7 @@ injection_summary_eye <- injections_raw %>%
   group_by(PatientID, EyeCode) %>% 
   summarise(index_date = min(Date),
             final_injection_date = max(Date),
-            total_injections = n(), 
+            total_injections = max(injection_number),
             .groups = "drop") %>% 
   mutate(total_intervals = total_injections - 1)
 
@@ -99,7 +108,7 @@ va_raw <- as.data.table(injection_summary_eye)[, .(PatientID, EyeCode, index_dat
   as.data.table(visual_acuity), .(PatientID, EyeCode, index_date, Date, va_logmar, va_category_snellen), on = .(PatientID, EyeCode)][
     # Calculate months since index date
     , months_since_index:=interval(index_date, Date)/dmonths()][
-      # Calculate years ince index date
+      # Calculate years since index date
       , years_since_index := interval(index_date, Date)/dyears()][  
         # Mark baseline measurements (closest measurement to baseline)  
          , baseline := abs(months_since_index) == min(abs(months_since_index)), by = .(PatientID, EyeCode)][
@@ -116,6 +125,8 @@ fluid_raw <- as.data.table(injection_summary_eye)[
     as.data.table(noa), on = .(PatientID, EyeCode)][
       # Calculate months since index date
       , months_since_index:=interval(index_date, DATE)/dmonths()][
+        # Calculate years since index date
+          , years_since_index := interval(index_date, DATE)/dyears()][
         # Mark baseline measurements (closest measurement to baseline)  
         , baseline := abs(months_since_index) == min(abs(months_since_index)), by = .(PatientID, EyeCode)]
 
@@ -124,11 +135,22 @@ fluid_raw <- as.data.table(injection_summary_eye)[
 
 eye_raw <- patients_raw %>% 
   
+  # Eye level exclusions due to first treatment during covid or previous treatment elsewhere (non-naive)
+  inner_join(mdc %>% 
+  distinct(PatientID, EyeCode, exclude_covid),
+    by = "PatientID") %>% 
+  
+  # Flag eyes deemed non-naive at first injections (had received injections elsewhere)
+  left_join(injections_raw %>% 
+    filter(injection_number == 1) %>% 
+    select(PatientID, EyeCode, exclude_non_naive),
+    by = c("PatientID", "EyeCode")) %>% 
+  
   # Extract age at first injection (index date)
   inner_join(injections_raw %>% 
               filter(Date == index_date) %>% 
             select(PatientID, EyeCode, index_age = AGE),
-            by = "PatientID", multiple = "all") %>% 
+            by = c("PatientID", "EyeCode")) %>% 
   
   # Calculate years treated (index to final injection)
   left_join(injection_summary_eye, by = c("PatientID", "EyeCode")) %>% 
@@ -188,14 +210,23 @@ eye_raw %>%
 eye_raw %>% count(exclude_no_va)
 
 
+# List of eyes with exclusion criteria
+# eye_raw %>%
+#   select(PatientID, EyeCode, exclude_age, exclude_lt3_injections, exclude_no_fluid) %>%
+#   write_csv(paste0("//fas8200main-n2/OphBelfast/TASMC-extracts/eye-level-exclusions-", Sys.Date(), ".csv"))
+
+
 # Apply the exclusion criteria
 # Retain those with no baseline VA for use in other analyses
 eye <- eye_raw %>% 
   filter(!exclude_age, 
          !exclude_lt3_injections, 
-         !exclude_no_intervals, 
+         # !exclude_no_intervals, 
          # !exclude_no_va, 
-         !exclude_no_fluid) %>% 
+         !exclude_no_fluid,
+         !exclude_covid,
+         !exclude_non_naive
+         ) %>% 
   select(-matches("exclude")) %>% 
   
   # Derived variable categorising index age into decades
@@ -257,10 +288,12 @@ va_history <- snapshots[va_history_raw, roll = "nearest"][
         , va_change_lines := cut(va_change_logmar, 
                                  breaks = c(min(va_change_logmar, na.rm = TRUE), -0.2, 0.19, max(va_change_logmar, na.rm = TRUE)), 
                                  labels = c("gained >=2 lines", "< 2 lines change", "lost >= 2 lines"), 
-                                 include.lowest = TRUE)][
+                                 include.lowest = TRUE)][, va_change_cat := cut(va_change_logmar, 
+                                                                                breaks = c(min(va_change_logmar, na.rm = TRUE), -0.105, 0.1, max(va_change_logmar, na.rm = TRUE)), 
+                                                                                labels = c("Good (gained >5 letters)", "Partial (-5<=change<=5 letters)", "Non-response (lost > 5 letters)"), 
+                                                                                include.lowest = TRUE)][
                                    # Add the treatment year to match up with injection counts
                                    , treatment_year := as.factor(floor(years_since_index)+1)]
-
 
 
 # Fluid history for each eye
@@ -287,7 +320,9 @@ setkey(fluid_history_raw, months_since_index)
 fluid_history <- snapshots[fluid_history_raw, roll = "nearest"][
   , snapshot := .I == .I[which.min(abs(months_since_index - follow_up_month))] &
     months_since_index >= lower_lim &
-    months_since_index <= upper_lim, by = c("PatientID", "EyeCode", "follow_up_month")]#[
+    months_since_index <= upper_lim, by = c("PatientID", "EyeCode", "follow_up_month")][
+  # Add the treatment year to match up with injection counts
+  , treatment_year := as.factor(floor(years_since_index)+1)]
 
 
 # # Output the fluid history for exploratory analysis
@@ -299,6 +334,14 @@ fluid_history <- snapshots[fluid_history_raw, roll = "nearest"][
 # names(fluid_output) <- str_replace_all(names(fluid_output), "\\^|\\=", "")   
 # # write_csv(fluid_output, "//fas8200main-n2/OphBelfast/fluid-history.csv")
 # haven::write_sav(fluid_output, "//fas8200main-n2/OphBelfast/fluid-history.sav")
+
+# fluid_output <- fluid_history %>%
+#   inner_join(eye, by = c("PatientID", "EyeCode", "index_date")) %>% 
+#   rename(`First_Inj_Date` = `1st_Inj_Date`) 
+# names(fluid_output) <- str_replace_all(names(fluid_output), "(\\[|\\]|\\(|\\)|[[:space:]])|\\?", "_") 
+# names(fluid_output) <- str_replace_all(names(fluid_output), "\\^|\\=", "")   
+# # write_csv(fluid_output, "//fas8200main-n2/OphBelfast/fluid-history.csv")
+# haven::write_sav(fluid_output, "//fas8200main-n2/OphBelfast/fluid-history-complete.sav")
 
 
 
