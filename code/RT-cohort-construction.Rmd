@@ -1,0 +1,144 @@
+---
+title: "Rosetrees study - Cohort construction"
+author: "David M Wright - d.wright@qub.ac.uk"
+date: "Document compiled: `r Sys.Date()`"
+output: 
+  bookdown::html_document2:
+     toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(knitr)
+library(kableExtra)
+library(rprojroot)
+library(tidyverse)
+library(broom)
+```
+
+`r R.version.string`   
+
+# Introduction
+
+```{r run-analysis, include=FALSE}
+source(find_rstudio_root_file("Code/RT-cohort-construction.R"))
+```
+
+This analysis is of Electronic Medical Records (EMR) from the Belfast Health and Social Care Trust Macular Service extracted over the period `r min(as.Date(encounters$EncounterDate))` to `r max(as.Date(encounters$ExtractDate))`. The aim of the study is to investigate models to predict second eye conversion to wet AMD.
+
+This document describes construction of the analysis cohort. It is similar to the BIRAX study cohort described in `BIRAX-cohort-construction.html`. Pre-processing of the EMR (Medisoft) and fluid data are described in `BIRAX-assemble-Medisoft-data.html` and `BIRAX-assemble-NOA-data.html` respectively.
+
+
+# Cohort construction
+
+Data were extracted on `r as.Date(max(patients$ExtractDate))`. A proportion of event dates were after the recorded `ExtractDate`. For example, in the `Encounters` table `r nrow(filter(encounters, EncounterDate > ExtractDate))` records had an `EncounterDate` after the `ExtractDate`. This is related to the date perturbation used by Medisoft to maintain patient anonymity in the extract.
+
+Data processing steps are described in `BIRAX-cohort-construction.html`.
+Additional steps specific to this analysis were:
+
+* Identification of the first injection recorded for each patient and the date (the index date).   
+* Calculated the time between the index date and each OCT visit (potentially negative for OCTs before the index date).   
+* Generated an OCT visit sequence for each eye, with visit 0 at the index date, negative values prior to the index date and positive values after.   
+
+
+## Inclusion and exclusion criteria
+
+Data were extracted by Medisoft with the following inclusion and  exclusion criteria. 
+
+Inclusion: "Any patient having attended the BHSCT macular treatment service at least once during the period May 2008 to May 2018 with a diagnosis of AMD, DR/DMO or RVO."   
+Exclusion: "Any patient marked as a test patient."
+
+The unit of analysis is the person so criteria were applied at the person level:   
+
+* The raw data contained `r nrow(patients_raw_rt)` patients.   
+* `r nrow(filter(patients_raw_rt, exclude_no_AMD))` patients where neither eye had a diagnosis of age-related macular degeneration during the study period were excluded. 
+* `r nrow(filter(patients_raw_rt, !exclude_no_AMD, exclude_RVO))` patients that had a diagnosis of RVO in either eye at any point during the study period were excluded.   
+* `r nrow(filter(patients_raw_rt, !exclude_no_AMD, !exclude_RVO, exclude_DR_DMO))` patients that had a diagnosis of DMO/DR in either eye at any point during the study period were excluded.   
+* `r nrow(filter(patients_raw_rt, !exclude_no_AMD, !exclude_RVO, !exclude_DR_DMO, exclude_no_injections))` patients had no anti-VEGF injections in either eye during the study period and were excluded.   
+* `r nrow(filter(patients_raw_rt, !exclude_no_AMD, !exclude_RVO, !exclude_DR_DMO, !exclude_no_injections, exclude_age))` patients were aged <50 at the index date (first injection in first eye) and were excluded.   
+* `r nrow(filter(patients_raw_rt, !exclude_no_AMD, !exclude_RVO, !exclude_DR_DMO, !exclude_no_injections, !exclude_age, exclude_no_va))` patients did not have a visual acuity assessment in both eyes within 2 weeks prior to or including the index date and were excluded.   
+* `r nrow(filter(patients_raw_rt, !exclude_no_AMD, !exclude_RVO, !exclude_DR_DMO, !exclude_no_injections, !exclude_age, !exclude_no_va, exclude_no_oct))` patients did not have OCT volume scans taken of both eyes on or up to 2 weeks prior to the index date and were excluded.   
+* `r nrow(filter(patients_raw_rt, !exclude_no_AMD, !exclude_RVO, !exclude_DR_DMO, !exclude_no_injections, !exclude_age, !exclude_no_va, !exclude_no_oct, exclude_single_oct))` patients that had no further OCT scans after the initial scan were excluded (not possible to assess the outcome as not being regularly monitored).   
+
+A total of `r nrow(patients_rt)` patients remained after these exclusions. 
+
+
+# Study period
+
+Follow-up for each patient started at `fup_start`, the date of the OCT scan immediately prior to the first anti-VEGF injection for the first eye (within a maximum of two weeks prior to the injection).  
+Follow-up ended at `fup_end`, the date of the first anti-VEGF injection in the second eye (`index_date_2)` if conversion to wet AMD occurred or the date of the last OCT scan (`oct_end`), if conversion did not occur.   
+The primary outcome, conversion of the second eye to wet AMD, was defined as a logical variable `conversion`.  
+The total follow-up in months was defined in `fup_months`.  
+
+
+OCT visits outside for the follow-up period for each eye were excluded leaving a total of `r nrow(oct_history_rt)` scans.
+
+
+# Descriptive statistics at baseline
+
+Descriptive statistics for the eyes included in the analysis are given in Tables \@ref(tab:descriptives) to \@ref(tab:fluid-grid-baseline). Statistics are presented at the eye level as some patients were treated in both eyes, with treatment starting at different times. 
+
+## Patient characteristics
+
+```{r descriptives}
+patients_rt %>%
+   transmute(Age = index_age, Gender, Patients = " ") %>%
+  GenerateDescriptives(type = c(Age = "Mean (Range)")) %>%
+  kbl(caption = "Baseline characteristics of patients with AMD. Frequency and percentage reported for categorical variables.") %>%
+  kable_paper()
+```
+
+
+```{r eye-baseline}
+patients_rt %>% 
+  transmute(`Visual acuity (logMAR) - eye 1` = va_logmar_1,
+            `Visual acuity (logMAR) - eye 2` = va_logmar_2,
+            `Visual acuity (ETDRS) - eye 1` = va_etdrs_1,
+            `Visual acuity (ETDRS) - eye 2` = va_etdrs_2,
+            `Laterality - eye 1` = EyeCode_1) %>% 
+  GenerateDescriptives(type = c(`Visual acuity (ETDRS) - eye 1` = "Median (IQR)",
+                                `Visual acuity (ETDRS) - eye 2` = "Median (IQR)")) %>% 
+  kbl(caption = "Baseline characteristics of first treated eye and second eye.") %>%
+  kable_paper()
+```
+
+```{r conversion}
+patients_rt %>%
+   transmute(conversion = if_else(conversion, "Converted", "Did not convert"), `Follow up (months)` = fup_months, Patients = " ") %>%
+  GenerateDescriptives(col_var = conversion, type = c(`Follow up (months)` = "Median (IQR)")) %>%
+  kbl(caption = "Length of follow up by second eye AMD conversion status.") %>%
+  kable_paper()
+```
+
+```{r oct-visits}
+oct_history_rt %>% 
+  group_by(PatientID,  eye_order) %>% 
+  summarise(`OCT sequence length` = n(), .groups = "drop") %>% 
+  # mutate()
+  select(-PatientID) %>% 
+  GenerateDescriptives(col_var = eye_order, type = c(`OCT sequence length` = "Median (Range)")) %>% 
+  bind_rows(oct_history_rt %>% 
+  transmute(eye_order, "Total OCT visits" = " ") %>% 
+  GenerateDescriptives(col_var = eye_order)) %>% 
+  kbl(caption = "Distribution of OCT visits by eye order") %>% 
+  kable_paper()
+```
+
+
+```{r sequence-sample, fig.cap = "Sample of OCT visit sequences.", fig.height=10}
+oct_history_rt %>% 
+  slice(1:2000) %>% 
+  mutate(Patient = abbreviate(PatientID)) %>% 
+  rename(`Months since index date` = months_since_index) %>% 
+ggplot(aes(x = `Months since index date`, y = Patient)) + geom_point(aes(colour = conversion)) +
+  theme_light()
+```
+```{r sequence-length, fig.cap = "Distribution of OCT sequence lengths"}
+patients_rt %>% 
+  rename(`OCT sequence length` = oct_visits) %>% 
+  ggplot(aes(x = `OCT sequence length`)) + 
+  geom_bar() + 
+  theme_light() +
+  ylab("Patients")
+```
+

@@ -70,8 +70,12 @@ injection_summary_eye  <- injections_clean %>%
             final_injection_date = max(EncounterDate), 
             total_injections = n(),
             .groups = "drop") %>% 
-  mutate(total_intervals = total_injections - 1)
-
+  mutate(total_intervals = total_injections - 1) %>% 
+  # Order of eye conversions
+  # Tied conversion date across both eyes is indicated by 1.5
+  group_by(PatientID) %>% 
+  mutate(eye_order = rank(index_date)) %>% 
+  ungroup() 
 
 # For each visual acuity measurement, calculate the time since the first injection (index_date)
 va_raw <- as.data.table(injection_summary_eye)[, .(PatientID, EyeCode, index_date)][ 
@@ -137,7 +141,7 @@ eye_raw <- patients %>%
   left_join(RVO_patients, by = c("PatientID", "EyeCode")) %>% 
   left_join(DMO_DR_patients, by = c("PatientID", "EyeCode")) %>% 
   
-    # Calculate age at first injection (index date)
+  # Calculate age at first injection (index date)
   left_join(injection_summary_eye, by = c("PatientID", "EyeCode")) %>% 
   mutate(index_age =  interval(PerturbedDateofBirth, index_date)/dyears()) %>% 
   # Calculate years treated (index to final injection)
@@ -152,7 +156,6 @@ eye_raw <- patients %>%
   # ~ 5% of eyes longer VA than observation time
   # Where this occurs, set years observed to the greater of the three
   mutate(years_observed = pmax(years_treated, years_va, years_observed)) %>% 
-  
   
   # Join VA measured on the index date or up to 2 weeks prior as the baseline
   left_join(va_raw %>%
