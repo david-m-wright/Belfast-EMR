@@ -107,9 +107,14 @@ Descriptive statistics for the eyes included in the analysis are given in Tables
 ## Patient characteristics
 
 ```{r descriptives}
-eye %>%
-   transmute(Age = index_age, Gender, Eyes = " ") %>%
-  GenerateDescriptives(type = c(Age = "Mean (Range)")) %>%
+bind_rows(
+  eye %>%
+    transmute(Age = index_age) %>%
+    GenerateDescriptives(),
+  eye %>%
+    transmute(Age = index_age, Gender, Eyes = " ") %>%
+    GenerateDescriptives(type = c(Age = "Mean (Range)"))
+) %>%
   kbl(caption = "Baseline characteristics of eyes with AMD. Frequency and percentage reported for categorical variables.") %>%
   kable_paper()
 ```
@@ -134,6 +139,17 @@ eye %>%
                                 Injections = "Median (Range)",
                                 `Years treated` = "Median (Range)",
                                 `Total injections` = " ")),
+
+eye %>% 
+  transmute(
+            `Years observed` = years_observed,
+            `Years treated` = years_treated
+            ) %>% 
+  GenerateDescriptives(),
+
+eye %>% 
+  transmute(`Years observed < 3 months` = years_observed < 0.25) %>% 
+  GenerateDescriptives(),
 
 GenerateDescriptives(transmute(va_history, `Total VA exams` = " ")),
 
@@ -268,10 +284,15 @@ va_history %>% inner_join(
 ## Visual acuity
 
 ```{r va-baseline}
+bind_rows(
+  va_history %>% 
+    filter(baseline) %>% 
+    transmute(va_logmar) %>% 
+    GenerateDescriptives(),
 va_history %>% 
   filter(baseline) %>% 
   transmute(va_logmar, va_etdrs, va_category_snellen, Eyes = "n") %>% 
-  GenerateDescriptives(type = c(va_logmar = "Median (IQR)", va_etdrs = "Median (IQR)")) %>% 
+  GenerateDescriptives(type = c(va_logmar = "Median (IQR)", va_etdrs = "Median (IQR)"))) %>% 
   left_join(var_desc, by = "Variable") %>%
   mutate(Description = coalesce(Description, Variable)) %>%
   select(Description, everything(), -Variable) %>%
@@ -347,6 +368,12 @@ fluid_history %>%
 ```
 
 ```{r fluid-baseline, warning=FALSE}
+bind_rows(
+fluid_history %>% 
+  filter(baseline) %>% 
+  select(TRFVolumeNl, SRFVolumeNl, IRFVolumeNl, `PED volume[nl]`) %>% 
+  GenerateDescriptives(),
+
 fluid_history %>% 
   filter(baseline) %>% 
   select(all_of(noa_fluid), `PED volume[nl]`) %>% 
@@ -359,7 +386,8 @@ fluid_history %>%
                           `Average_TRF_height[um]` = "Median (IQR)",
                           `MaxSRF_height[um]` = "Median (IQR)",
                           `MaxIRF_height[um]` = "Median (IQR)",
-                          `PED volume[nl]` = "Median (IQR)")) %>% 
+                          `PED volume[nl]` = "Median (IQR)"))
+) %>% 
   left_join(va_fl_correlations, by = "Variable") %>% 
    left_join(noa_dictionary %>% 
                  select(Parameter, `Raw Parameter`), 
@@ -370,6 +398,7 @@ fluid_history %>%
    kbl(caption = "Distribution of NOA OCT fluid measurements at baseline, sorted by strength of correlation with visual acuity.") %>% 
    kable_paper()
 ```
+
 
 ```{r fluid-baseline-by-age, warning=FALSE}
 fluid_history %>% 
@@ -445,6 +474,24 @@ fluid_history %>%
    relocate(Parameter, .after = Variable) %>% 
    kbl(digits = 2, caption = "Distribution of NOA OCT fluid measurements at baseline by gender.") %>% 
    kable_paper()
+```
+
+```{r fluid-volume-baseline-by-amd-type}
+bind_rows(
+fluid_history %>% 
+  filter(baseline) %>% 
+  inner_join(eye, by = c("PatientID", "EyeCode")) %>% 
+  transmute(amd_type, SRFVolumeNl, IRFVolumeNl) %>% 
+  GenerateDescriptives(col_var = amd_type),
+fluid_history %>% 
+  filter(baseline) %>% 
+  inner_join(eye, by = c("PatientID", "EyeCode")) %>% 
+  transmute(SRFVolumeNl, IRFVolumeNl, amd_type, Eyes = " ") %>% 
+  GenerateDescriptives(col_var = amd_type, type = c(IRFVolumeNl = "Median (IQR)",
+                                                    SRFVolumeNl = "Median (IQR)"))
+) %>% 
+  kbl(caption = "Distribution of fluid volumes by AMD types as baseline.") %>% 
+  kable_paper()
 ```
 
 
@@ -524,7 +571,7 @@ baseline_fluid_grid %>%
   facet_wrap(~abbr_metric, ncol = 2)
 ```
 
-```{r fluid-grid-baseline, warning=FALSE}
+```{r fluid-grid-baseline, warning=FALSE, include=TRUE}
 fluid_history %>% 
   filter(baseline) %>% 
   select(all_of(noa_grid)) %>% 

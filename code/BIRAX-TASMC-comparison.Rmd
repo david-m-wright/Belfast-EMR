@@ -1,0 +1,165 @@
+---
+title: "BIRAX study - Cohort comparison"
+author: "David M Wright - d.wright@qub.ac.uk"
+date: "Document compiled: `r Sys.Date()`"
+output: 
+  bookdown::html_document2:
+     toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(knitr)
+library(kableExtra)
+library(rprojroot)
+library(tidyverse)
+library(broom)
+
+conflicted::conflict_prefer("chisq.test", "stats")
+```
+
+`r R.version.string`   
+
+# Introduction
+
+```{r helper-function, include=FALSE}
+# source(find_rstudio_root_file("Code/BIRAX-TASMC-comparison.R"))
+
+# Function to calculate the two sample t-test from summary data
+# From https://stats.stackexchange.com/questions/30394/how-to-perform-two-sample-t-tests-in-r-by-inputting-sample-statistics-rather-tha/30450#30450
+t.test.from.summary.data <- function(mean1, sd1, n1, mean2, sd2, n2, ...) {
+  data1 <- scale(1:n1)*sd1 + mean1
+  data2 <- scale(1:n2)*sd2 + mean2
+  t.test(data1, data2, ...)
+}
+# Cross checked against https://www.graphpad.com/quickcalcs/ttest2/
+
+
+# Sample sizes at each centre
+n_eyes_bhsct <- 4659
+n_eyes_tasmc <- 711
+```
+
+This analysis is of Electronic Medical Records (EMR) from the Belfast Health and Social Care Trust Macular Service and the Tel Aviv Sourasky Medical Centre. The aim of the study is to investigate the potential for machine learning to identify factors and biomarkers associated with long-term AMD treatment response.
+
+This document compares cohorts of patients beginning anti-VEGF treatment for wet AMD across centres. Cohort construction is described in 'BIRAX-cohort-construction.Rmd` and `TASMC-cohort-construction.Rmd`.
+
+Because the data from the two centres cannot be brought together for governance reasons, summary statistics were calculated at each centre and then used to make simple inferential comparisons.
+Summary statistics are found in:
+
+Belfast: `BIRAX-cohort-construction-2023-10-20.html`   
+Tel Aviv: `TASMC-cohort-constuction-2023-10-20.html`
+
+
+# Dataset description
+
+Inferential comparison of the cohorts was done using only the summary statistics generated at each site (the data were not brought together). Continuous variables were compared using t-tests and categorical variables were compared using chi-squared tests.
+
+Years of follow up (_years observed_).
+
+```{r follow-up-years}
+t.test.from.summary.data(mean1 = 4.92, sd1 = 3.04, n1 = n_eyes_bhsct,
+                         mean2 = 2.92, sd2 = 1.46, n2= n_eyes_tasmc)
+
+```
+
+Eyes with < 3 months follow up
+
+```{r follow-up-3-months}
+chisq.test(cbind(c(4611, 48), 
+                 c(690, 21)))
+```
+
+
+
+# Baseline characteristics
+
+Age
+```{r age}
+t.test.from.summary.data(mean1 = 79.4, sd1 = 8.14, n1 = n_eyes_bhsct,
+                         mean2 = 80.2, sd2 = 9.04, n2= n_eyes_tasmc)
+```
+
+
+Gender
+
+```{r gender}
+chisq.test(cbind(c(3038, 1621), 
+                 c(394, 317)))
+```
+
+Visual acuity - logMAR
+For this comparison, note that there was a substantial proportion of missing VA measurements in TASMC.
+```{r logmar}
+t.test.from.summary.data(mean1 = 0.55, sd1 = 0.362, n1 = n_eyes_bhsct,
+                         mean2 = 0.69, sd2 = 0.582, n2= n_eyes_tasmc-143)
+```
+
+Visual acuity - four categories
+```{r va-categories}
+chisq.test(cbind(c(1094, 1526, 1333, 706), 
+                 c(201, 110, 122, 135)))
+```
+PED volume
+```{r ped}
+t.test.from.summary.data(mean1 = 776, sd1 = 1510, n1 = n_eyes_bhsct,
+                         mean2 = 846, sd2 = 1890, n2= n_eyes_tasmc)
+```
+
+Total retinal fluid volume
+```{r trf}
+t.test.from.summary.data(mean1 = 540, sd1 = 1090, n1 = n_eyes_bhsct,
+                       mean2 = 511, sd2 = 917, n2= n_eyes_tasmc)
+```
+
+Intra-retinal fluid volume
+```{r irf}
+t.test.from.summary.data(mean1 = 175, sd1 = 546, n1 = n_eyes_bhsct,
+                         mean2 = 240, sd2 = 670, n2= n_eyes_tasmc)
+```
+
+Sub-retinal fluid volume
+```{r srf}
+t.test.from.summary.data(mean1 = 366, sd1 = 904, n1 = n_eyes_bhsct,
+                         mean2 = 271, sd2 = 613, n2= n_eyes_tasmc)
+```
+
+Fluid volumes by AMD type (SRF only, IRF only, SRF and IRF (both components))
+
+SRF in SRF only eyes.
+```{r srf-srf-only}
+t.test.from.summary.data(mean1 = 326, sd1 = 598, n1 = n_eyes_bhsct,
+                         mean2 = 261, sd2 = 401, n2= n_eyes_tasmc)
+```
+IRF in IRF only eyes.
+```{r irf-irf-only}
+t.test.from.summary.data(mean1 = 164, sd1 = 376, n1 = n_eyes_bhsct,
+                         mean2 = 325, sd2 = 893, n2= n_eyes_tasmc)
+```
+
+
+SRF in IRF and SRF (both fluid) eyes.
+```{r srf-both-fluids}
+t.test.from.summary.data(mean1 = 506, sd1 = 1090, n1 = n_eyes_bhsct,
+                         mean2 = 415, sd2 = 783, n2= n_eyes_tasmc)
+```
+
+IRF in IRF and SRF (both fluid) eyes.
+
+```{r irf-both-fluids}
+t.test.from.summary.data(mean1 = 255, sd1 = 673, n1 = n_eyes_bhsct,
+                         mean2 = 350, sd2 = 730, n2= n_eyes_tasmc)
+```
+
+AMD type (No fluid, SRF only, IRF only, SRF and IRF)
+
+```{r amd-type}
+chisq.test(cbind(c(232, 989, 705, 2733), 
+                 c(41, 172, 141, 357)))
+```
+
+
+
+
+
+
