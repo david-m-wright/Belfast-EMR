@@ -162,20 +162,21 @@ eye_raw <- patients_raw %>%
   
   # For a proportion of eyes years_treated is greater than years_observed 
   # Where this occurs, set years observed to the greater of the two
-  mutate(years_observed = pmax(years_treated, years_va)) %>% 
+  mutate(years_observed = pmax(years_treated, years_va, na.rm = TRUE)) %>% 
   
   # Join VA measured on the index date or up to 40 days prior as the baseline
+  # Larger acceptable period than for BHSCT dataset
   left_join(va_raw %>%
               # filter(baseline) %>%
-               filter(baseline, months_since_index > -1.3 & months_since_index <=0) %>%
+              filter(baseline, months_since_index > -1.3 & months_since_index <=0) %>%
               select(PatientID, EyeCode, va_logmar, va_category_snellen),
             by = c("PatientID", "EyeCode")) %>% 
   
   
   # Join presence of fluid measurements (closest to index date but up to 40 days prior)
   left_join(fluid_raw %>% 
-               filter(baseline) %>% 
-               # filter(baseline, months_since_index > -1.3 & months_since_index <=0) %>% 
+               #filter(baseline) %>% 
+                filter(baseline, months_since_index > -1.3 & months_since_index <=0) %>% 
               transmute(PatientID, EyeCode, fluid_measurement = baseline), 
             by = c("PatientID", "EyeCode")) %>% 
   
@@ -196,6 +197,9 @@ eye_raw <- patients_raw %>%
     # Those without a baseline VA measurement
     exclude_no_va = is.na(va_logmar),
     
+    # Those without any VA followup 
+    exclude_no_va_followup = is.na(years_va),
+    
     # Those without a baseline fluid measurement
     exclude_no_fluid = !fluid_measurement
   ) %>% 
@@ -207,7 +211,6 @@ eye_raw <- patients_raw %>%
 # Check exclusions
 eye_raw %>% 
   count(across(matches("exclude")))
-eye_raw %>% count(exclude_no_va)
 
 
 # List of eyes with exclusion criteria
@@ -217,12 +220,13 @@ eye_raw %>% count(exclude_no_va)
 
 
 # Apply the exclusion criteria
-# Retain those with no baseline VA for use in other analyses
 eye <- eye_raw %>% 
   filter(!exclude_age, 
          !exclude_lt3_injections, 
-         # !exclude_no_intervals, 
+          !exclude_no_intervals, 
+         # Retain those with no baseline VA for use in other analyses
          # !exclude_no_va, 
+         !exclude_no_va_followup,
          !exclude_no_fluid,
          !exclude_covid,
          !exclude_non_naive
@@ -233,7 +237,7 @@ eye <- eye_raw %>%
   mutate(Age = cut(index_age, right = F, include.lowest = T, breaks = c(50, 60, 70, 80, 90, max(index_age))),
          Age = IntervalToInequality(Age, "yrs"))
 
-
+eye %>% count(is.na(va_logmar))
 
 ## Prepare time series of injections, VA, OCT and fluid measurements for the selected eyes ##
 
