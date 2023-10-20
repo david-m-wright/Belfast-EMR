@@ -483,8 +483,8 @@ skim_median_iqr <- function(x, sig_digits = 1){
 skim_median_iqr(1:10) 
 
 # Custom skimmer list for numeric values
-skim_numeric <- skim_with(base = list(n = ~ as.character(n_complete(.))),
-                          numeric = list(
+skim_numeric <- skim_with(base = sfl(n = ~ as.character(n_complete(.))),
+                          numeric = sfl(
                             `Mean (SD)` = ~ skim_mean_sd(., sig_digits = 3),
                             `Median (Range)` = ~skim_median_range(., sig_digits = 3),
                             `Median (IQR)` = ~skim_median_iqr(., sig_digits = 3),
