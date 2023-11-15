@@ -32,11 +32,13 @@ mdc_raw <- read_csv("//fas8200main-n2/OphBelfast/Final for analysis/MDC_2023-08-
 mdc <- mdc_raw %>% 
   filter(!exclude_research_patient)
 
-# List of patients with exclusion criteria
- # mdc_raw %>% 
- #   distinct(PatientID, exclude_research_patient) %>% 
- #   write_csv(paste0("//fas8200main-n2/OphBelfast/TASMC-extracts/patient-level-exclusions-", Sys.Date(), ".csv"))
-  
+# # List of patsients with exclusion criteria
+#  mdc_raw %>%
+#    distinct(PatientID, exclude_research_patient) %>%
+#    write_csv(paste0("//fas8200main-n2/OphBelfast/TASMC-extracts/patient-level-exclusions-","2023-10-20", ".csv"))
+#  
+#    write_csv(paste0("//fas8200main-n2/OphBelfast/TASMC-extracts/patient-level-exclusions-", Sys.Date(), ".csv"))
+#   
 
 # Patient details
 patients_raw <- mdc %>% 
@@ -214,10 +216,13 @@ eye_raw %>%
 
 
 # List of eyes with exclusion criteria
-# eye_raw %>%
+ # eye_raw %>%
 #   select(PatientID, EyeCode, exclude_age, exclude_lt3_injections, exclude_no_fluid) %>%
-#   write_csv(paste0("//fas8200main-n2/OphBelfast/TASMC-extracts/eye-level-exclusions-", Sys.Date(), ".csv"))
-
+   # select(PatientID, EyeCode, exclude_age, exclude_lt3_injections, exclude_no_intervals, 
+# exclude_no_va_followup, exclude_no_fluid, exclude_covid, exclude_non_naive) %>%
+   # write_csv(paste0("//fas8200main-n2/OphBelfast/TASMC-extracts/eye-level-exclusions-", "2023-10-20", ".csv"))
+   #   write_csv(paste0("//fas8200main-n2/OphBelfast/TASMC-extracts/eye-level-exclusions-", Sys.Date(), ".csv"))
+   
 
 # Apply the exclusion criteria
 eye <- eye_raw %>% 

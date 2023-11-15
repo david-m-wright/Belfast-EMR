@@ -29,6 +29,8 @@ This analysis is of Electronic Medical Records (EMR) from the Tel Aviv Sourasky 
 
 This document gives descriptive statistics for various sub-groups in the dataset.
 
+The cohort used for this analysis is described in `TASMC-cohort-construction-2023-10-20.html`.   
+
 # VA change by baseline visual acuity{#VA-section}
 
 ```{r va-change-by-year}

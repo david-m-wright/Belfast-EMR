@@ -368,6 +368,30 @@ fluid_history %>%
    kable_paper()
 ```
 
+```{r fluid-baseline-boxplot}
+fluid_history %>% 
+  filter(baseline) %>% 
+  ggplot(aes(x = TRFVolumeNl)) +
+  geom_histogram(bins = 50) +
+  theme_light()
+```
+
+```{r fluid-quantile}
+# fluid_history %>% 
+#   filter(baseline) %>%
+#   select(PatientID, EyeCode, TRFVolumeNl, IRFVolumeNl, SRFVolumeNl) %>% 
+#   pivot_longer(cols = matches("Volume")) %>% 
+#   reframe(qtl = seq(0,1, 0.01),
+#             val = ~quantile(., probs = seq(0,1, 0.01)),
+#           .by = name) %>% 
+#   ggplot(aes(x = qtl, y = val)) +
+#   geom_line() +
+#   theme_light()+s
+#   coord_flip()
+
+
+```
+
 ```{r fluid-baseline-by-age, warning=FALSE}
 fluid_history %>% 
   filter(baseline) %>% 
