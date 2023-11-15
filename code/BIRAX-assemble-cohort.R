@@ -117,6 +117,8 @@ fluid_raw <- as.data.table(injection_summary_eye)[
     as.data.table(noa), on = .(PatientID, EyeCode)][
     # Calculate months since index date
     , months_since_index:=as.interval(index_date, OCTDate)/dmonths()][
+      # Calculate years since index date
+      , years_since_index := interval(index_date, OCTDate)/dyears()][
     # Mark baseline measurements (closest measurement to baseline)  
     , baseline := abs(months_since_index) == min(abs(months_since_index)), by = .(PatientID, EyeCode)][
   # Set an OCT scan sequence variable independent of injection sequence
@@ -270,6 +272,10 @@ va_history <- snapshots[va_history_raw, roll = "nearest"][
   , va_change_lines := cut(va_change_logmar, 
                                breaks = c(min(va_change_logmar), -0.2, 0.19, max(va_change_logmar)), 
                                labels = c("gained >=2 lines", "< 2 lines change", "lost >= 2 lines"), include.lowest = TRUE)][
+                                 , va_change_cat := cut(va_change_logmar, breaks = c(min(va_change_logmar, na.rm = TRUE), -0.105, 0.1, 
+                                                                                     max(va_change_logmar, na.rm = TRUE)), 
+                                                        labels = c("Good (gained >5 letters)", "Partial (-5<=change<=5 letters)", "Non-response (lost > 5 letters)"), 
+                                                                       include.lowest = TRUE)][
                                  # Add the treatment year to match up with injection counts
                                  , treatment_year := as.factor(floor(years_since_index)+1)]
 
@@ -314,7 +320,7 @@ fluid_history_raw <- fluid_raw %>%
   # Roll forward baseline fluid measurements up to 2 weeks prior to baseline
   mutate(months_since_index = if_else(baseline & months_since_index > -0.5 & months_since_index < 0, 0, months_since_index)) %>% 
   # Assign each measurement to a treatment month (baseline = zero, within first month of treatment = 1)
-  mutate(treatment_months = ceiling(months_since_index)) %>% 
+  mutate(treatment_months = ceiling(months_since_index)) %>%  
   # Exclude all measurements prior to baseline
   filter(months_since_index >= 0) %>% 
 
@@ -323,14 +329,17 @@ fluid_history_raw <- fluid_raw %>%
                               SRF == 0 & IRF == 1 ~ "IRF only",
                               SRF == 1 & IRF == 0 ~ "SRF only",
                               SRF == 0 & IRF == 0 ~ "No fluid"), levels = c("No fluid", "SRF only", "IRF only", "SRF and IRF")))
-
+  
 
 # Identify thickness measurements corresponding to snapshots
 setkey(fluid_history_raw, months_since_index)
 fluid_history <- snapshots[fluid_history_raw, roll = "nearest"][
   , snapshot := .I == .I[which.min(abs(months_since_index - follow_up_month))] &
     months_since_index >= lower_lim &
-    months_since_index <= upper_lim, by = c("PatientID", "EyeCode", "follow_up_month")]#[
+    months_since_index <= upper_lim, by = c("PatientID", "EyeCode", "follow_up_month")][
+      # Add the treatment year to match up with injection counts
+      , treatment_year := as.factor(floor(years_since_index)+1)]
+#[
 # 
 # # Calculate change in VA from baseline
 # , `:=` (va_change_logmar = va_logmar - va_logmar[(snapshot & baseline)],
@@ -403,7 +412,9 @@ injections <- injections_clean %>%
   # Calculate year of treatment for each eye (since index date)
   # Starts count at year 1
   mutate(years_treated = as.interval(index_date, EncounterDate)/dyears(),
-         treatment_year = as.factor(floor(years_treated) +1))
+         treatment_year = as.factor(floor(years_treated) +1)) %>% 
+  group_by(PatientID, EyeCode) %>% 
+  mutate(injection_number = row_number(EncounterDate))
 
 # Note that some injections for selected eyes were in other clinic types e.g. cataract or glaucoma
 # This may be because an incorrect clinic type was set at the beginning of the day or because of a genuine clinical need
