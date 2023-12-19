@@ -47,8 +47,8 @@ This document compares cohorts of patients beginning anti-VEGF treatment for wet
 Because the data from the two centres cannot be brought together for governance reasons, summary statistics were calculated at each centre and then used to make simple inferential comparisons.
 Summary statistics are found in:
 
-Belfast: `BIRAX-cohort-construction-2023-10-20.html`   
-Tel Aviv: `TASMC-cohort-constuction-2023-10-20.html`
+Belfast: `BIRAX-cohort-construction-2023-12-19.html`   
+Tel Aviv: `TASMC-cohort-constuction-2023-12-19.html`
 
 
 # Dataset description
