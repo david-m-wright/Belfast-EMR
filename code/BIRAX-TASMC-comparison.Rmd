@@ -124,6 +124,23 @@ t.test.from.summary.data(mean1 = 366, sd1 = 904, n1 = n_eyes_bhsct,
                          mean2 = 271, sd2 = 613, n2= n_eyes_tasmc)
 ```
 
+Central sub-field thickness
+```{r cst}
+t.test.from.summary.data(mean1 = 345, sd1 = 124, n1 = n_eyes_bhsct,
+                         mean2 = 349, sd2 = 127, n2= n_eyes_tasmc)
+```
+
+
+
+Central sub-field volume
+```{r csv}
+t.test.from.summary.data(mean1 = 270, sd1 = 96.7, n1 = n_eyes_bhsct,
+                         mean2 = 269, sd2 = 99.2, n2= n_eyes_tasmc)
+```
+
+
+
+
 Fluid volumes by AMD type (SRF only, IRF only, SRF and IRF (both components))
 
 SRF in SRF only eyes.
