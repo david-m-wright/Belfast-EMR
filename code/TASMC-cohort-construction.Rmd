@@ -340,12 +340,12 @@ fluid_history %>%
 bind_rows(
 fluid_history %>% 
   filter(baseline) %>% 
-  select(TRFVolumeNl, SRFVolumeNl, IRFVolumeNl, `PED volume[nl]`) %>% 
+  select(TRFVolumeNl, SRFVolumeNl, IRFVolumeNl, `PED volume[nl]`, `CST[um]`, `CSV[nl]`) %>% 
   GenerateDescriptives()
 ,
 fluid_history %>% 
   filter(baseline) %>% 
-  select(all_of(noa_fluid), `PED volume[nl]`) %>% 
+  select(all_of(noa_fluid), `PED volume[nl]`, `CST[um]`, `CSV[nl]`) %>% 
     mutate(Eyes = " ") %>% 
    GenerateDescriptives(type = c(SRFVolumeNl = "Median (IQR)",
                           IRFVolumeNl = "Median (IQR)",
@@ -355,7 +355,9 @@ fluid_history %>%
                           `Average_TRF_height[um]` = "Median (IQR)",
                           `MaxSRF_height[um]` = "Median (IQR)",
                           `MaxIRF_height[um]` = "Median (IQR)",
-                          `PED volume[nl]` = "Median (IQR)"))
+                          `PED volume[nl]` = "Median (IQR)",
+                        `CST[um]` = "Median (IQR)",
+                        `CSV[nl]` = "Median (IQR)"))
 ) %>% 
   left_join(va_fl_correlations, by = "Variable") %>% 
    left_join(noa_dictionary %>% 
