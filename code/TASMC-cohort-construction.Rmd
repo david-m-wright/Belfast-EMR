@@ -613,7 +613,7 @@ fluid_history %>%
 
 
 ```{r fluid-grid-baseline-srf-irf, warning=FALSE}
-fluid_history %>% 
+fgb1 <- fluid_history %>% 
   filter(baseline, amd_type == "SRF and IRF") %>% 
   select(all_of(noa_grid)) %>% 
     mutate(Eyes = " ") %>% 
@@ -625,7 +625,8 @@ fluid_history %>%
               by = c("Variable" = "Raw Parameter")) %>% 
    relocate(Parameter, .after = Variable) %>% 
     arrange(desc(estimate)) %>% 
-   select(-estimate) %>% 
+   select(-estimate) 
+  fgb1 %>% 
    kbl(caption = "Distribution of NOA OCT fluid and retinal measurements at baseline by ETDRS grid region, sorted by strength of correlation with visual acuity. Eyes with SRF and IRF at baseline.") %>% 
    kable_paper()
 ```
