@@ -122,6 +122,12 @@ va_phases %>%
 
 The same classification of response phases was used to [this section](#VA-section).
 
+Fluid responses were classifed as follows:
+
+* *Good* - Complete fluid resolution (TRF volume = 0) at the end of the response phase   
+* *Partial* - Reduction in fluid volume by $\geq30$% compared to baseline      
+* *Non-responder* - Reduction in fluid volume by $\lt30$% compared to baseline   
+
 ```{r fluid-phase-time, fig.cap="Timing of fluid measurements used to represent phases of treatment response.", warning = FALSE, fig.height=3}
 ggplot(fluid_response, aes(x = years_since_index)) +
   geom_histogram(bins = 40) +
@@ -143,12 +149,12 @@ fluid_phases %>%
 
 ```{r fluid-second-transition}
 fluid_phases %>% 
-  select(Primary, Secondary) %>% 
-  GenerateDescriptives(col_var = Secondary) %>% 
+  select(Secondary, Late) %>% 
+  GenerateDescriptives(col_var = Late) %>% 
   filter(!is.na(Level)) %>% 
     select(-Variable) %>% 
-  rename(`Primary response` = Level) %>% 
-  kbl(caption = "Fluid changes relative to baseline in the primary and secondary phases of treatment response. Columns indicate response in the late phase.") %>% 
+  rename(`Secondary response` = Level) %>% 
+  kbl(caption = "Fluid changes relative to baseline in the secondary and late phases of treatment response. Columns indicate response in the late phase.") %>% 
   kable_paper()
 ```
 
@@ -168,10 +174,77 @@ fluid_history %>%
   mutate(Variable = if_else(Level == "n", "Eyes", Variable)) %>% 
   arrange(amd_type, Variable, response, Level) %>% 
   select(Variable, amd_type, response, Level, Good, Partial, `Non-responder`) %>% 
-  kbl(caption ="Baseline fluid measurements by response and phase after treatment.") %>% 
+  kbl(caption ="Baseline fluid measurements by AMD type, response and phase after treatment.") %>% 
   kable_paper()
 ```
 
+```{r fl-response-baseline-characteristics}
+# Baseline fluid
+fluid_history %>% 
+  filter(baseline, amd_type != "No fluid") %>% 
+  select(PatientID, EyeCode, baseline, one_of(noa_fluid), one_of(noa_retinal)) %>% 
+  # Baseline VA (note some missing baseline VA)
+  left_join(
+  va_history %>% 
+  filter(baseline & snapshot) %>% 
+  select(PatientID, EyeCode, va_logmar)
+  , by = c("PatientID", "EyeCode")) %>% 
+  # Fluid response
+  inner_join(fluid_response %>% 
+             select(PatientID, EyeCode, response, fl_response), by = c("PatientID", "EyeCode")) %>% 
+  select(-IRF, -SRF, -Fluid, -PatientID) %>% 
+  group_by(response, fl_response) %>% 
+  skim_numeric() %>% 
+  format_skim_numeric(col_var = fl_response) %>% 
+  # filter(Level == "Median (IQR)" | (Level == "n" & Variable == "SRFVolumeNl")) %>% 
+  filter(Level == "Median (IQR)") %>% 
+  mutate(Variable = if_else(Level == "n", "Eyes", Variable)) %>% 
+  arrange(Variable, response, Level) %>% 
+  select(Variable, response, Level, Good, Partial, `Non-responder`) %>% 
+  kbl(caption ="Baseline fluid and VA measurements by fluid response and phase after treatment.") %>% 
+  kable_paper()
+```
+
+
+
+```{r trf-volumes-baseline-fluid-response, warning=FALSE, fig.cap="TRF volumne (Nl) at baseline by fluid response category and response period.", fig.width=9, fig.height=5}
+fluid_history %>% 
+  filter(baseline, amd_type != "No fluid") %>% 
+  select(PatientID, EyeCode, TRFVolumeNl) %>% 
+  inner_join(fluid_response %>% 
+             select(PatientID, EyeCode, response, fl_response), by = c("PatientID", "EyeCode")) %>% 
+  filter(response != "Secondary") %>% 
+  ggplot(aes(y = TRFVolumeNl, x = response)) +
+  geom_boxplot(notch = TRUE) +
+  facet_wrap(~fl_response) +
+  theme_light() +
+  ylim(c(0, 2500)) +
+  xlab("Response period") +
+  theme(axis.text = element_text(size = 14), 
+        axis.title = element_text(size = 15),
+        strip.text = element_text(size = 14))
+
+```
+
+
+
+```{r trf-volumes-baseline-fluid-response-alternate, warning=FALSE, fig.cap="TRF volumne (Nl) at baseline by response period and fluid response category.", fig.width=9, fig.height=5}
+fluid_history %>% 
+  filter(baseline, amd_type != "No fluid") %>% 
+  select(PatientID, EyeCode, TRFVolumeNl) %>% 
+  inner_join(fluid_response %>% 
+             select(PatientID, EyeCode, response, fl_response), by = c("PatientID", "EyeCode")) %>% 
+  filter(response != "Secondary") %>% 
+  ggplot(aes(y = TRFVolumeNl, x = fl_response)) +
+  geom_boxplot(notch = TRUE) +
+  facet_wrap(~response) +
+  theme_light() +
+  ylim(c(0, 2500)) +
+  xlab("Response category") +
+  theme(axis.text = element_text(size = 14), 
+        axis.title = element_text(size = 15),
+        strip.text = element_text(size = 14))
+```
 
 Figures \@ref(fig:first-resolution-injections) and \@ref(fig:first-resolution-time) and Table \@ref(tab:first-resolution-stats) do not include those where fluid never resolved.
 
@@ -198,6 +271,7 @@ first_resolution %>%
   kbl(caption = "Time and number injections required to achieve fluid resolution.") %>% 
   kable_paper()
 ```
+
 
 
 # Number of annual injections
