@@ -76,3 +76,20 @@ noa <- noa_raw %>%
   slice_tail(n = 1) %>% 
   ungroup()
 
+
+# NOA output from cleaned clinical dataset
+noa_clean <- read_csv("//fas8200main-n2/OphBelfast/Clean data/clean_clinic.csv") %>%
+  rename(PatientID = ID_anon, 
+         EyeCode = EYE) %>% 
+  mutate(across(matches("Bscan_|Section_"), ~na_if(., -1000)),
+         across(c(IRF, 
+                  SRF, 
+                  Fluid, 
+                  `Bscan_1st_highest_fluid(nl)`,
+                  `Bscan_2nd_highest_fluid(nl)`,
+                  `Bscan_3rd_highest_fluid(nl)`,
+                  ERM,
+                  RPE_irregularities,
+                  PED), as.factor))
+
+names(noa_clean) <- str_replace_all(names(noa_clean), "\\((nl|um|mm\\^2)\\)", "\\[\\1\\]")
