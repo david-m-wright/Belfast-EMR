@@ -3,6 +3,7 @@
 library(tidyverse)
 library(lubridate)
 
+source(rprojroot::find_rstudio_root_file("code/EMR-helper-functions.R"))
 source(rprojroot::find_rstudio_root_file("code/BIRAX-assemble-Medisoft-data.R"))
 source(rprojroot::find_rstudio_root_file("code/BIRAX-assemble-NOA-data.R"))
 
