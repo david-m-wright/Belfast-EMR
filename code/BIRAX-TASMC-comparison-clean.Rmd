@@ -1,5 +1,5 @@
 ---
-title: "BIRAX study - Cohort comparison"
+title: "BIRAX study - Comparison of Belfast and clean TASMC cohorts"
 author: "David M Wright - d.wright@qub.ac.uk"
 date: "Document compiled: `r Sys.Date()`"
 output: 
@@ -37,7 +37,7 @@ t.test.from.summary.data <- function(mean1, sd1, n1, mean2, sd2, n2, ...) {
 
 # Sample sizes at each centre
 n_eyes_bhsct <- 4659
-n_eyes_tasmc <- 711
+n_eyes_tasmc <- 548
 ```
 
 This analysis is of Electronic Medical Records (EMR) from the Belfast Health and Social Care Trust Macular Service and the Tel Aviv Sourasky Medical Centre. The aim of the study is to investigate the potential for machine learning to identify factors and biomarkers associated with long-term AMD treatment response.
@@ -48,7 +48,7 @@ Because the data from the two centres cannot be brought together for governance 
 Summary statistics are found in:
 
 Belfast: `BIRAX-cohort-construction-2023-12-19.html`   
-Tel Aviv: `TASMC-cohort-constuction-2023-12-19.html`
+Tel Aviv: `TASMC-cohort-constuction-clean-2024-03-13.html`
 
 
 # Dataset description
@@ -59,7 +59,7 @@ Years of follow up (_years observed_).
 
 ```{r follow-up-years}
 t.test.from.summary.data(mean1 = 4.92, sd1 = 3.04, n1 = n_eyes_bhsct,
-                         mean2 = 2.92, sd2 = 1.46, n2= n_eyes_tasmc)
+                         mean2 = 3.01, sd2 = 1.34, n2= n_eyes_tasmc)
 
 ```
 
@@ -67,7 +67,7 @@ Eyes with < 3 months follow up
 
 ```{r follow-up-3-months}
 chisq.test(cbind(c(4611, 48), 
-                 c(690, 21)))
+                 c(545, 3)))
 ```
 
 
@@ -77,7 +77,7 @@ chisq.test(cbind(c(4611, 48),
 Age
 ```{r age}
 t.test.from.summary.data(mean1 = 79.4, sd1 = 8.14, n1 = n_eyes_bhsct,
-                         mean2 = 80.2, sd2 = 9.04, n2= n_eyes_tasmc)
+                         mean2 = 79.9, sd2 = 8.94, n2= n_eyes_tasmc)
 ```
 
 
@@ -85,49 +85,49 @@ Gender
 
 ```{r gender}
 chisq.test(cbind(c(3038, 1621), 
-                 c(394, 317)))
+                 c(301, 247)))
 ```
 
 Visual acuity - logMAR
 For this comparison, note that there was a substantial proportion of missing VA measurements in TASMC.
 ```{r logmar}
 t.test.from.summary.data(mean1 = 0.55, sd1 = 0.362, n1 = n_eyes_bhsct,
-                         mean2 = 0.69, sd2 = 0.582, n2= n_eyes_tasmc-143)
+                         mean2 = 0.634, sd2 = 0.529, n2= n_eyes_tasmc-114)
 ```
 
 Visual acuity - four categories
 ```{r va-categories}
 chisq.test(cbind(c(1094, 1526, 1333, 706), 
-                 c(201, 110, 122, 135)))
+                 c(155, 92, 102, 85)))
 ```
 PED volume
 ```{r ped}
 t.test.from.summary.data(mean1 = 776, sd1 = 1510, n1 = n_eyes_bhsct,
-                         mean2 = 846, sd2 = 1890, n2= n_eyes_tasmc)
+                         mean2 = 798, sd2 = 1870, n2= n_eyes_tasmc)
 ```
 
 Total retinal fluid volume
 ```{r trf}
 t.test.from.summary.data(mean1 = 540, sd1 = 1090, n1 = n_eyes_bhsct,
-                       mean2 = 511, sd2 = 917, n2= n_eyes_tasmc)
+                       mean2 = 525, sd2 = 931, n2= n_eyes_tasmc)
 ```
 
 Intra-retinal fluid volume
 ```{r irf}
 t.test.from.summary.data(mean1 = 175, sd1 = 546, n1 = n_eyes_bhsct,
-                         mean2 = 240, sd2 = 670, n2= n_eyes_tasmc)
+                         mean2 = 242, sd2 = 690, n2= n_eyes_tasmc)
 ```
 
 Sub-retinal fluid volume
 ```{r srf}
 t.test.from.summary.data(mean1 = 366, sd1 = 904, n1 = n_eyes_bhsct,
-                         mean2 = 271, sd2 = 613, n2= n_eyes_tasmc)
+                         mean2 = 283, sd2 = 625, n2= n_eyes_tasmc)
 ```
 
 Central sub-field thickness
 ```{r cst}
 t.test.from.summary.data(mean1 = 345, sd1 = 124, n1 = n_eyes_bhsct,
-                         mean2 = 349, sd2 = 127, n2= n_eyes_tasmc)
+                         mean2 = 353, sd2 = 127, n2= n_eyes_tasmc)
 ```
 
 
@@ -135,7 +135,7 @@ t.test.from.summary.data(mean1 = 345, sd1 = 124, n1 = n_eyes_bhsct,
 Central sub-field volume
 ```{r csv}
 t.test.from.summary.data(mean1 = 270, sd1 = 96.7, n1 = n_eyes_bhsct,
-                         mean2 = 269, sd2 = 99.2, n2= n_eyes_tasmc)
+                         mean2 = 273, sd2 = 99.5, n2= n_eyes_tasmc)
 ```
 
 
@@ -146,33 +146,33 @@ Fluid volumes by AMD type (SRF only, IRF only, SRF and IRF (both components))
 SRF in SRF only eyes.
 ```{r srf-srf-only}
 t.test.from.summary.data(mean1 = 326, sd1 = 598, n1 = 989,
-                         mean2 = 261, sd2 = 401, n2= 172)
+                         mean2 = 264, sd2 = 386, n2= 142)
 ```
 IRF in IRF only eyes.
 ```{r irf-irf-only}
 t.test.from.summary.data(mean1 = 164, sd1 = 376, n1 = 705,
-                         mean2 = 325, sd2 = 893, n2= 141)
+                         mean2 = 406, sd2 = 1030, n2= 100)
 ```
 
 
 SRF in IRF and SRF (both fluid) eyes.
 ```{r srf-both-fluids}
 t.test.from.summary.data(mean1 = 506, sd1 = 1090, n1 = 2733,
-                         mean2 = 415, sd2 = 783, n2= 357)
+                         mean2 = 415, sd2 = 783, n2= 284)
 ```
 
 IRF in IRF and SRF (both fluid) eyes.
 
 ```{r irf-both-fluids}
 t.test.from.summary.data(mean1 = 255, sd1 = 673, n1 = 2733,
-                         mean2 = 350, sd2 = 730, n2= 357)
+                         mean2 = 350, sd2 = 730, n2= 284)
 ```
 
 AMD type (No fluid, SRF only, IRF only, SRF and IRF)
 
 ```{r amd-type}
 chisq.test(cbind(c(232, 989, 705, 2733), 
-                 c(41, 172, 141, 357)))
+                 c(22, 142, 100, 284)))
 ```
 
 
