@@ -71,12 +71,12 @@ The primary outcome, conversion of the second eye to wet AMD, was defined as a l
 The total follow-up in months was defined in `fup_months`.  
 
 
-OCT visits outside for the follow-up period for each eye were excluded leaving a total of `r nrow(oct_history_rt)` scans.
+OCT visits outside of the follow-up period for each eye were excluded leaving a total of `r nrow(oct_history_rt)` scans.
 
 
 # Descriptive statistics at baseline
 
-Descriptive statistics for the eyes included in the analysis are given in Tables \@ref(tab:descriptives) to \@ref(tab:fluid-grid-baseline). Statistics are presented at the eye level as some patients were treated in both eyes, with treatment starting at different times. 
+Descriptive statistics for the eyes included in the analysis are given in Tables \@ref(tab:descriptives) to \@ref(tab:bilat). Statistics are presented at the eye level as some patients were treated in both eyes, with treatment starting at different times. 
 
 ## Patient characteristics
 
@@ -124,21 +124,35 @@ oct_history_rt %>%
   kable_paper()
 ```
 
-
 ```{r sequence-sample, fig.cap = "Sample of OCT visit sequences.", fig.height=10}
 oct_history_rt %>% 
-  slice(1:2000) %>% 
+  slice(1:2100) %>% 
   mutate(Patient = abbreviate(PatientID)) %>% 
-  rename(`Months since index date` = months_since_index) %>% 
-ggplot(aes(x = `Months since index date`, y = Patient)) + geom_point(aes(colour = conversion)) +
+  inner_join(patients_rt %>% select(PatientID, fup_months), by = "PatientID") %>% 
+  rename(`Months since follow-up start` = months_since_fup_start) %>% 
+ggplot(aes(x = `Months since follow-up start`, y = Patient)) + 
+  geom_point(aes(x = fup_months, y = Patient, colour = conversion), size = 4) +
+  geom_point(aes(shape = bilateral_oct)) +
   theme_light()
 ```
+
 ```{r sequence-length, fig.cap = "Distribution of OCT sequence lengths"}
-patients_rt %>% 
-  rename(`OCT sequence length` = oct_visits) %>% 
+oct_history_rt %>% 
+  group_by(PatientID) %>% 
+  summarise(`OCT sequence length` = max(visit_sequence)+1) %>% 
   ggplot(aes(x = `OCT sequence length`)) + 
   geom_bar() + 
   theme_light() +
   ylab("Patients")
+```
+
+```{r bilat}
+oct_history_rt %>% 
+  distinct(PatientID, visit_sequence, bilateral_oct) %>% 
+  transmute( `Measurements` =  if_else(bilateral_oct, "Bilateral OCT", "Unilateral OCT"),
+             Visits = " ") %>% 
+  GenerateDescriptives() %>% 
+  kbl(caption = "Distribution of OCT visits by number of eyes measured.") %>% 
+  kable_paper()
 ```
 

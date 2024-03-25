@@ -1,10 +1,9 @@
-# Cohort construction for Rosetrees Trust project on prediction fellow eye conversion to AMD
+# Cohort construction for Rosetrees Trust project on prediction of fellow eye conversion to AMD
 
 library(tidyverse)
 library(lubridate)
 
 source(rprojroot::find_rstudio_root_file("code/BIRAX-assemble-cohort.R"))
-
 
 # Prepare dataset
 
@@ -15,7 +14,7 @@ va_raw_rt <- as.data.table(injection_summary_eye)[eye_order == 1, .(PatientID, i
   as.data.table(visual_acuity), .(PatientID, EyeCode, EyeCode_1, index_date, EncounterDate, va_logmar, va_etdrs, va_category_snellen), on = .(PatientID)][
     # Calculate months since index date
     , months_since_index:=as.interval(index_date, EncounterDate)/dmonths()][
-      # Calculate years ince index date
+      # Calculate years since index date
       , years_since_index := as.interval(index_date, EncounterDate)/dyears()][  
         # Mark baseline measurements (closest measurement to baseline)  
         , baseline := abs(months_since_index) == min(abs(months_since_index)), by = .(PatientID, EyeCode)][
@@ -28,6 +27,7 @@ va_raw_rt <- as.data.table(injection_summary_eye)[eye_order == 1, .(PatientID, i
 # Details of all the examinations that were extracted
 # Note that there were multiple ExamIDs and SeriesIDs (scans within exams) on some dates
 oct_details <- fread(file = file.path(file_path, "OCT_ImageVariables.txt"))
+setkey(oct_details, FilePath)
 
 # List of all dates on which an OCT volume scan was taken 
 # When there are multiple exams on the same day, select the last (matches criteria used for raw NOA data)
@@ -39,6 +39,7 @@ oct_volumes <- unique(oct_details[ModalityType == "Volume" & ModalityProcedure =
 
 # Find date of first anti-VEGF injection for each eye (index dates)
 index_dates_rt <- injection_summary_eye %>% 
+  # Exclude eyes that were first injected on the same date
   filter(eye_order != 1.5) %>% 
   select(PatientID, EyeCode, index_date, eye_order) %>% 
   pivot_wider(names_from = eye_order, values_from = c("EyeCode", "index_date")) %>% 
@@ -55,21 +56,24 @@ setkey(oct_volumes, PatientID, visit_date)
 setkey(index_dates_rt, PatientID, join_date)
 
 
-# Mark each OCT scan with a visit number, with one being the baseline visit on the day of the first injection (index_date)
+# Mark each OCT scan with a visit sequence number, with zero being the baseline visit on the day of the first injection (index_date)
 oct_history_raw_rt <-
+  # Find all the OCT volume scans for each patient
   index_dates_rt[, .(PatientID, index_date_1)][oct_volumes, on = "PatientID"][, c("visit_number", "months_since_index") := list(
-    # Visit number - if an OCT was missed for one eye that visit will be missed from that eye sequence
+    # Assign a visit number - if both eyes were imaged at that visit the visit number will be duplicated
+    # The visit number starts at 1 and is relative to the first OCT scan NOT the index_date
     dense_rank(visit_date),
-    # Time since first injection - negative if the visit was before the index date - so visit 1 may be before index_visit for the first eye
+    # Calculate time since first injection - negative if the visit was before the index date - so visit 1 may be before index_visit for the first eye
     interval(index_date_1, visit_date) /
       dmonths()),
     by = "PatientID"][,
                       # Mark the closest OCT visit to the index date up to 2 weeks prior to the index date
-                      # index_visit := .I == .I[which.min(abs(months_since_index))],    by = "PatientID"][
                         index_visit := abs(months_since_index) == min(abs(months_since_index)),    by = "PatientID"][
-                        # OCT visit sequence starting at zero at the index visit. Negative values were OCTs taken before the index_visit
+                        # Assign OCT visit sequence starting at zero at the index visit. Negative values were OCTs taken before the index_visit
                         , visit_sequence := visit_number - visit_number[index_visit], by = "PatientID"]
 setkey(oct_history_raw_rt, PatientID, visit_date)
+
+
 
 
 ## Patient level information
@@ -91,12 +95,12 @@ patients_raw_rt  <- patients %>%
     mutate(exclude_no_injections = if_else(is.na(exclude_no_injections), TRUE, exclude_no_injections)) %>% 
 
     
-    # Exclude patients with both eyes converting on the same date
-    left_join(injection_summary_eye %>%
-        filter(eye_order == 1.5) %>%
-        distinct(PatientID) %>%
-        mutate(exclude_bilateral_index = TRUE), by = "PatientID") %>%
-    mutate(exclude_bilateral_index = if_else(is.na(exclude_bilateral_index), FALSE, exclude_bilateral_index)) %>%
+    # # Exclude patients with both eyes converting on the same date
+    # left_join(injection_summary_eye %>%
+    #     filter(eye_order == 1.5) %>%
+    #     distinct(PatientID) %>%
+    #     mutate(exclude_bilateral_index = TRUE), by = "PatientID") %>%
+    # mutate(exclude_bilateral_index = if_else(is.na(exclude_bilateral_index), FALSE, exclude_bilateral_index)) %>%
 
 
     # Find date of first anti-VEGF injection for each eye (index dates)
@@ -131,12 +135,10 @@ patients_raw_rt  <- patients %>%
   mutate(exclude_no_oct = if_else(is.na(exclude_no_oct), TRUE, exclude_no_oct)) %>% 
 
   # Put in the OCT sequence start (start of follow up) and end dates for patient
-  left_join(oct_history_raw_rt[(index_visit & months_since_index > -0.5) | months_since_index >= 0, .(fup_start = min(visit_date), oct_end = max(visit_date), oct_visits = max(visit_sequence)+1), by = "PatientID"], by = "PatientID") %>% 
+  # The number of oct_visits is not correctly trimmed if there was a conversion event (this count will include visits after the conversion)
+  left_join(oct_history_raw_rt[(index_visit & months_since_index > -0.5) | months_since_index >= 0, .(fup_start = min(visit_date), oct_end = max(visit_date), oct_visits_untrimmed = max(visit_sequence)+1), by = "PatientID"], by = "PatientID") %>% 
   
-  # Exclude those with only a single OCT visit (not possible to assess outcome as not being regularly monitored)
-  mutate(exclude_single_oct = oct_visits == 1) %>% 
-  
-    # Add the end of follow-up and outcome
+  # Add the end of follow-up and outcome
   mutate(fup_end = coalesce(index_date_2, oct_end),
          conversion = !is.na(index_date_2),
          fup_months = interval(fup_start, fup_end)/dmonths()) %>% 
@@ -148,17 +150,25 @@ patients_raw_rt  <- patients %>%
   mutate(exclude_age = index_age < 50 & !is.na(index_age))
   
 
+# Exclude those with a single OCT visit after sequence trimming (not possible to assess outcome as not being regularly monitored)
+patients_raw_rt <- patients_raw_rt %>% 
+  left_join(
+oct_history_raw_rt[patients_raw_rt, on = c(PatientID = "PatientID"), nomatch = 0][
+  visit_date >= fup_start & visit_date <= fup_end, .(oct_visits_trimmed = max(visit_sequence)+1), by = "PatientID"] %>% 
+mutate(exclude_single_oct = oct_visits_trimmed == 1),
+by = "PatientID")
+   
+
 # Check exclusions
-  patients_raw_rt %>% 
-      count(across(matches("exclude"))) %>% 
-      arrange(n)
-    
+patients_raw_rt %>% 
+  count(across(matches("exclude"))) %>% 
+  arrange(n)
 
 # Apply the exclusion criteria
 patients_rt <- patients_raw_rt %>% 
   filter(!exclude_no_AMD,
          !exclude_no_injections,
-         !exclude_bilateral_index,
+         # !exclude_bilateral_index,
          !exclude_no_va,
          !exclude_age,
          !exclude_DR_DMO,
@@ -166,12 +176,50 @@ patients_rt <- patients_raw_rt %>%
          !exclude_no_oct,
          !exclude_single_oct) %>% 
   select(-N, -matches("exclude"))
-
+setkey(patients_rt, PatientID)
 
 
 # The OCT history just for cohort members 
+# Trimmed to the follow-up period: between closest OCT to the first eye index date and the date of conversion (if it occurred) or the date of the last visit
 oct_history_rt <- patients_rt[, .(PatientID, fup_start, fup_end, conversion, EyeCode_1)][oct_history_raw_rt, on = c(PatientID = "PatientID"), nomatch = 0][
   visit_date >= fup_start & visit_date <= fup_end,][
-    , eye_order := if_else(EyeCode == EyeCode_1, 1, 2)
-  ]
+    , c("eye_order", "months_since_fup_start") := list(if_else(EyeCode == EyeCode_1, 1, 2), interval(fup_start, visit_date)/dmonths())
+  ][# Mark if both eyes were imaged at the OCT visit
+    , bilateral_oct := .N==2, by = c("PatientID", "visit_sequence")]
+
+
+# Find all the BMP files associated with the selected OCT volumes
+# Get the names and paths to the OCT volumes
+fnames <- oct_history_rt %>% 
+    select(FilePath) %>% 
+    # slice(1:5) %>% 
+    separate_wider_regex(cols = "FilePath", patterns = c(volpath = ".*\\\\Volume\\\\", volname = ".*", "-", suffix = ".*"))
+
+# Find all the slice filenames (20mins)
+oct_slices_fnames <- map2(.x = fnames$volpath, .y = fnames$volname, ~list.files(path = paste0("F:\\BIRAX_ProcessedOutputs", .x), pattern = .y, full.names = TRUE), .progress = TRUE) %>% 
+  list_c()
+oct_slices <- data.table(filename = oct_slices_fnames)[
+  , FilePath := str_replace(filename, "F:\\\\BIRAX_ProcessedOutputs", "")
+]
+setkey(oct_slices, FilePath)
+
+# Full details of the slices
+oct_slices_details <- oct_slices[oct_details, nomatch = NULL]
+setkey(oct_slices_details, PatientID)
+nrow(oct_slices_details)
+
+# Write details to a file
+fwrite(oct_slices_details, file = "F:OCT_Image_Variables_RT.csv")  
+  
+# Folder structure
+# conversion(T/F) > PatientID > EyeCode > 
+# File structure
+
+# patients_rt[, .(PatientID, conversion)][]
+# oct_slices_details %>% 
+#   separate_wider_regex(cols = FilePath, patterns = )
+
+
+
+
 
