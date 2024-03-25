@@ -46,8 +46,9 @@ noa_raw <- bind_rows(
   rename_with(.fn = ~str_replace(., "\\(mm\\^2\\)", "[mm\\^2]"))
   ) %>% 
   rename(PatientID = ID_anon, 
-         EyeCode = Laterality) %>% 
-  mutate(across(DATE, ymd),
+         EyeCode = Laterality,
+         Date = DATE) %>% 
+  mutate(across(Date, ymd),
          across(matches("Bscan_|Section_"), ~na_if(., -1000)),
          across(c(IRF, 
                   SRF, 
@@ -69,7 +70,7 @@ noa <- noa_raw %>%
   filter(`Analysis eligibility` == 1) %>% 
   filter(FramesNum >= 18) %>% 
   mutate(OCTMissing = rowSums(across(!matches("Bscan"), is.na))) %>% 
-  group_by(PatientID, EyeCode, DATE) %>% 
+  group_by(PatientID, EyeCode, Date) %>% 
   slice_max(`Analysis eligibility`, n = 1, with_ties = TRUE) %>% 
   slice_min(OCTMissing, n = 1, with_ties = TRUE) %>% 
   slice_max(FramesNum, n = 1, with_ties = TRUE) %>% 

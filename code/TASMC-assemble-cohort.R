@@ -127,9 +127,9 @@ fluid_raw <- as.data.table(injection_summary_eye)[
     # Join injection_summary_eye and NOA fluid measurements
     as.data.table(noa), on = .(PatientID, EyeCode)][
       # Calculate months since index date
-      , months_since_index:=interval(index_date, DATE)/dmonths()][
+      , months_since_index:=interval(index_date, Date)/dmonths()][
         # Calculate years since index date
-          , years_since_index := interval(index_date, DATE)/dyears()][
+          , years_since_index := interval(index_date, Date)/dyears()][
         # Mark baseline measurements (closest measurement to baseline)  
         , baseline := abs(months_since_index) == min(abs(months_since_index)), by = .(PatientID, EyeCode)]
 

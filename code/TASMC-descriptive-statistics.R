@@ -3,8 +3,9 @@
 library(skimr)
 library(tidyverse)
 library(data.table)
-source(rprojroot::find_rstudio_root_file("code/TASMC-assemble-cohort.R"))
 
+# Must have run script to assemble a cohort first
+# e.g. source(rprojroot::find_rstudio_root_file("code/TASMC-assemble-cohort.R"))
 
 # Timing of functional response to treatment
 
@@ -79,10 +80,10 @@ va_phases <- va_response %>%
 
 
 # Join the third injections to the VA history
-fluid_response_raw <- injections_third[fluid_history[, join_date := DATE],
+fluid_response_raw <- injections_third[fluid_history[, join_date := Date],
                                     roll = Inf, on = .(PatientID, EyeCode, join_date)
 ][# Number the fluid measurements that took place after 3rd injection
-  , fluid_seq := row_number(DATE), by = .(PatientID, EyeCode, injection_number)
+  , fluid_seq := row_number(Date), by = .(PatientID, EyeCode, injection_number)
 ][
   # Indicate first fluid measurement after 3rd injection (only if <12 months after first injection)
   , primary := injection_number == 3 & fluid_seq == 1 & months_since_index < 12
@@ -100,7 +101,7 @@ fluid_response_raw <- injections_third[fluid_history[, join_date := DATE],
                                  late ~ "Late"), levels = c("Primary", "Secondary", "Late"))
 ] 
 # Calculate proportional change since baseline
-setkey(fluid_response_raw, PatientID, EyeCode, DATE)
+setkey(fluid_response_raw, PatientID, EyeCode, Date)
 fluid_response_raw[, TRFVolumeNl_change_prop := TRFVolumeNl/TRFVolumeNl[1], by = .(PatientID, EyeCode)]
 
 # Classify fluid response (total fluid) as good partial or non-response
@@ -128,8 +129,8 @@ fluid_response <- fluid_response_raw[!is.na(response), ]
 fluid_response_raw %>% filter(is.na(response)) %>% 
   select(PatientID, EyeCode, fl_response, TRFVolumeNl, TRFVolumeNl_change_prop)
   
-fluid_response_raw[PatientID == 3 & EyeCode == "OD",.(PatientID, EyeCode,DATE, months_since_index, TRFVolumeNl, TRFVolumeNl_change_prop)]
-fluid_response[PatientID == 3 & EyeCode == "OD",.(PatientID, EyeCode,DATE, months_since_index, TRFVolumeNl, TRFVolumeNl_change_prop, fl_response)]
+fluid_response_raw[PatientID == 3 & EyeCode == "OD",.(PatientID, EyeCode,Date, months_since_index, TRFVolumeNl, TRFVolumeNl_change_prop)]
+fluid_response[PatientID == 3 & EyeCode == "OD",.(PatientID, EyeCode,Date, months_since_index, TRFVolumeNl, TRFVolumeNl_change_prop, fl_response)]
 
 
 # Classifying fluid changes by phase of functional response
@@ -147,7 +148,7 @@ fluid_phases <- fluid_response %>%
 first_resolution <- as.data.table(injections)[, join_date := Date][
     # Find the first fluid measurement at which the fluid resolution was achieved
     fluid_response_raw[fl_response == "Good" & !baseline, .SD[which.min(months_since_index)], by = .(PatientID, EyeCode)][
-      , join_date := DATE],  
+      , join_date := Date],  
     # Perform the rolling join
     roll = TRUE, on = .(PatientID, EyeCode, join_date)]
   
