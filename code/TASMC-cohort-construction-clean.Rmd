@@ -535,6 +535,25 @@ fluid_history %>%
    kable_paper()
 ```
 
+
+
+```{r fluid-baseline-boxplot-age, fig.cap= "Baseline fluid volumes by age group.", warning=FALSE, fig.width=11, fig.height=7}
+fluid_history %>% 
+  filter(baseline) %>% 
+  inner_join(eye, by = c("PatientID", "EyeCode")) %>%
+  mutate(across(Age, as.factor)) %>% 
+  select(Age, SRFVolumeNl, IRFVolumeNl, `PED volume[nl]`) %>% 
+  pivot_longer(cols = c(SRFVolumeNl, IRFVolumeNl, `PED volume[nl]`), names_to = "Variable", values_to = "Volume") %>% 
+  mutate(Variable = fct_relabel(Variable, .fun = ~str_sub(.x, 1, 3))) %>% 
+  mutate(Variable = fct_relevel(Variable, c("IRF", "SRF", "PED"))) %>% 
+  ggplot(aes(x = Age,  y = Volume, fill = Variable)) +
+  geom_boxplot(outlier.shape = NA)+
+   coord_cartesian(ylim = c(0, 1500)) +
+  theme_light() +
+  theme(axis.text = element_text(size = 14), axis.title = element_text(size = 14), legend.text = element_text(size = 14)) +
+  labs(fill = NULL)
+```
+
 ```{r fluid-retinal-baseline-by-gender}
 fluid_history %>% 
   filter(baseline) %>% 
