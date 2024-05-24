@@ -451,13 +451,24 @@ fbg %>%
                  select(Parameter, `Raw Parameter`), 
               by = c("Variable" = "Raw Parameter")) %>% 
   
-    
-  # Fit a linear trend with age as a continuous variable
-  left_join(fbg %>%
-              select(-Gender) %>% 
-  map_dfr( ~tidy(lm(.x~fbg$Gender)), .id = "Variable") %>% 
-  filter(term == "fbg$GenderM", !is.na(p.value)) %>% 
-  transmute(Variable, `Difference in means (M-F)` = estimate, P = format.pval(p.value, digits = 1,  eps = 0.001)),
+# Fit a linear model with gender as the only predictor to compare the means across genders
+  left_join(fluid_history %>%
+  filter(baseline) %>%
+  inner_join(eye, by = c("PatientID", "EyeCode")) %>%
+  select(Gender, all_of(noa_fluid), `PED volume[nl]`) %>%
+  map_dfr( .y = .$Gender, ~tidy(lm(.x~.y)), .id = "Variable") %>% 
+  filter(term == ".yM", !is.na(p.value)) %>% 
+  transmute(Variable, `Difference in means (M-F)` = estimate, `P means` = format.pval(p.value, digits = 1,  eps = 0.001)),
+  by = "Variable") %>% 
+  
+  # Compare medians for each fluid measurement across genders
+  left_join(
+  fluid_history %>%
+  filter(baseline) %>%
+  inner_join(eye, by = c("PatientID", "EyeCode")) %>%
+  select(Gender, all_of(noa_fluid), `PED volume[nl]`, -SRF, -IRF, -Fluid) %>%
+  map_dfr( .y = .$Gender, ~tidy(kruskal.test(.x~.y)), .id = "Variable") %>% 
+  transmute(Variable, `K-W test stat` = statistic, `P medians` = format.pval(p.value, digits = 1,  eps = 0.001)),
   by = "Variable") %>% 
   
    relocate(Parameter, .after = Variable) %>% 

@@ -26,6 +26,8 @@ source(find_rstudio_root_file("Code/BIRAX-assemble-cohort.R"))
 
 This analysis is of Electronic Medical Records (EMR) from the Belfast Health and Social Care Trust Macular Service extracted over the period `r min(as.Date(encounters$EncounterDate))` to `r max(as.Date(encounters$ExtractDate))`. The aim of the study is to investigate the potential for machine learning to identify factors and biomarkers associated with long-term AMD treatment response.
 
+# Data sources
+
 This document describes construction of the analysis cohort. Pre-processing of the Medisoft and fluid data are described in `BIRAX-assemble-Medisoft-data.html` and `BIRAX-assemble-NOA-data.html` respectively.
 
  
@@ -88,7 +90,9 @@ Exclusion: "Any patient marked as a test patient."
 EMR for a total of `r nrow(patients)` patients were included in the extracted dataset, with `r nrow(injections_raw)` records of anti-VEGF injections. The unit of analysis is the eye so criteria were applied at the eye level:   
 
 * The raw data contained `r nrow(eye_raw)` eyes.   
-* `r nrow(filter(eye_raw, exclude_no_AMD))` eyes had no diagnosis of age-related macular degeneration and were excluded. 
+* `r nrow(filter(eye_raw, exclude_no_AMD))` eyes had no diagnosis of age-related macular degeneration and were excluded.    
+This left `r nrow(filter(eye_raw, !exclude_no_AMD))` AMD eyes from `r nrow(distinct(filter(eye_raw, !exclude_no_AMD), PatientID))` patients.
+
 * `r nrow(filter(eye_raw, !exclude_no_AMD, exclude_age))` eyes were in patients aged <50 at the index date and were excluded.
 * `r nrow(filter(eye_raw, !exclude_no_AMD, !exclude_age, exclude_lt3_injections))` eyes had fewer than three anti-VEGF injections during the study period  and were excluded.   
 * `r nrow(filter(eye_raw, !exclude_no_AMD, !exclude_age, !exclude_lt3_injections, exclude_RVO))` eyes had a diagnosis of RVO at any point during the study period and were excluded.   
@@ -465,19 +469,30 @@ fluid_history %>%
               by = c("Variable" = "Raw Parameter")) %>% 
   
     
-  # Fit a linear trend with age as a continuous variable
+  # Fit a linear model with gender as the only predictor to compare the means across genders
   left_join(fluid_history %>%
   filter(baseline) %>%
   inner_join(eye, by = c("PatientID", "EyeCode")) %>%
   select(Gender, all_of(noa_fluid), `PED volume[nl]`) %>%
   map_dfr( .y = .$Gender, ~tidy(lm(.x~.y)), .id = "Variable") %>% 
   filter(term == ".yM", !is.na(p.value)) %>% 
-  transmute(Variable, `Difference in means (M-F)` = estimate, P = format.pval(p.value, digits = 1,  eps = 0.001)),
+  transmute(Variable, `Difference in means (M-F)` = estimate, `P means` = format.pval(p.value, digits = 1,  eps = 0.001)),
+  by = "Variable") %>% 
+  
+  # Compare medians for each fluid measurement across genders
+  left_join(
+  fluid_history %>%
+  filter(baseline) %>%
+  inner_join(eye, by = c("PatientID", "EyeCode")) %>%
+  select(Gender, all_of(noa_fluid), `PED volume[nl]`, -SRF, -IRF, -Fluid) %>%
+  map_dfr( .y = .$Gender, ~tidy(kruskal.test(.x~.y)), .id = "Variable") %>% 
+  transmute(Variable, `K-W test stat` = statistic, `P medians` = format.pval(p.value, digits = 1,  eps = 0.001)),
   by = "Variable") %>% 
   
    relocate(Parameter, .after = Variable) %>% 
-   kbl(digits = 2, caption = "Distribution of NOA OCT fluid measurements at baseline by gender.") %>% 
+   kbl(digits = 2, caption = "Distribution of NOA OCT fluid measurements at baseline by gender. Means compared using t-tests, medians compared using Kruskal-Wallis tests.") %>% 
    kable_paper()
+
 ```
 
 ```{r fluid-volume-baseline-by-amd-type}
