@@ -89,10 +89,12 @@ va_raw <- as.data.table(injection_summary_eye)[, .(PatientID, EyeCode, index_dat
         # Mark baseline measurements (closest measurement to baseline)  
         , baseline := abs(months_since_index) == min(abs(months_since_index)), by = .(PatientID, EyeCode)][
           # Only retain eyes that received injections (and hence had a baseline measurement)
-          !is.na(baseline),
-        ]
-
-
+          !is.na(baseline),][
+          # Ensure there is only one prospective baseline measurement for each eye
+          , N := seq_len(.N), by=c("PatientID", "EyeCode", "baseline")][
+          !(baseline & N>1)][
+          , N:=NULL]
+        
 
 ## NOA fluid measurements
 # For each OCT fluid measurement, calculate the time since the first injection (index_date)
@@ -106,7 +108,6 @@ fluid_raw <- as.data.table(injection_summary_eye)[
         , years_since_index := interval(index_date, Date)/dyears()][
           # Mark baseline measurements (closest measurement to baseline)  
           , baseline := abs(months_since_index) == min(abs(months_since_index)), by = .(PatientID, EyeCode)]
-
 
 ### Assemble eye level dataset (single row per eye) ###
 

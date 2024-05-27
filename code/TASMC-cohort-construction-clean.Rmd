@@ -264,6 +264,8 @@ eye %>%
   kable_paper()
 ```
 
+The information in Tables (\@ref(tab:va-baseline-amd-type) and \@ref(tab:va-baseline-amd-type-transposed)) is also displayed graphically in Figure \@ref(fig:va-baseline-amd-type-figure).
+
 ```{r va-baseline-amd-type}
 fluid_history %>% 
   filter(baseline) %>% 
@@ -279,6 +281,44 @@ by = c("PatientID", "EyeCode")) %>%
   select(Description, everything(), -Variable) %>%
   kbl(caption = "Distribution of visual acuity outcomes at baseline by fluid presence.") %>% 
   kable_paper()
+```
+
+
+
+```{r va-baseline-amd-type-transposed}
+fluid_history %>% 
+  filter(baseline) %>% 
+  select(PatientID, EyeCode, amd_type) %>% 
+  inner_join(
+va_history %>% 
+  filter(baseline),
+by = c("PatientID", "EyeCode")) %>% 
+  transmute(amd_type, va_category_snellen, Eyes = "n") %>% 
+  GenerateDescriptives(col_var = va_category_snellen) %>% 
+  left_join(var_desc, by = "Variable") %>%
+  mutate(Description = coalesce(Description, Variable)) %>%
+  select(Description, everything(), -Variable) %>%
+  kbl(caption = "Distribution of fluid presence at baseline by visual acuity.") %>% 
+  kable_paper()
+```
+
+```{r va-baseline-amd-type-figure, fig.cap="Distribution of fluid presence at baseline by visual acuity.", fig.width=4.5, fig.height=3}
+fluid_history %>% 
+  filter(baseline) %>% 
+  select(PatientID, EyeCode, amd_type) %>% 
+  inner_join(
+va_history %>% 
+  filter(baseline),
+by = c("PatientID", "EyeCode")) %>% 
+  mutate(va_category_snellen = fct_relabel(va_category_snellen, ~str_replace(., " (?=\\()", "\n")),
+         `AMD type` = amd_type) %>% 
+  count(`AMD type`, va_category_snellen, name = "Eyes") %>%
+  ggplot(aes(y = va_category_snellen)) +
+  geom_col(aes(x = Eyes, fill = `AMD type`)) +
+  guides(fill=guide_legend(ncol = 2)) + 
+  theme_light() +  
+  ylab("") + 
+  theme(legend.position = "top")
 ```
 
 ## Retinal fluid distribution
@@ -451,16 +491,16 @@ fbg %>%
                  select(Parameter, `Raw Parameter`), 
               by = c("Variable" = "Raw Parameter")) %>% 
   
-# Fit a linear model with gender as the only predictor to compare the means across genders
-  left_join(fluid_history %>%
-  filter(baseline) %>%
-  inner_join(eye, by = c("PatientID", "EyeCode")) %>%
-  select(Gender, all_of(noa_fluid), `PED volume[nl]`) %>%
-  map_dfr( .y = .$Gender, ~tidy(lm(.x~.y)), .id = "Variable") %>% 
-  filter(term == ".yM", !is.na(p.value)) %>% 
-  transmute(Variable, `Difference in means (M-F)` = estimate, `P means` = format.pval(p.value, digits = 1,  eps = 0.001)),
-  by = "Variable") %>% 
-  
+# # Fit a linear model with gender as the only predictor to compare the means across genders
+#   left_join(fluid_history %>%
+#   filter(baseline) %>%
+#   inner_join(eye, by = c("PatientID", "EyeCode")) %>%
+#   select(Gender, all_of(noa_fluid), `PED volume[nl]`) %>%
+#   map_dfr( .y = .$Gender, ~tidy(lm(.x~.y)), .id = "Variable") %>% 
+#   filter(term == ".yM", !is.na(p.value)) %>% 
+#   transmute(Variable, `Difference in means (M-F)` = estimate, `P means` = format.pval(p.value, digits = 1,  eps = 0.001)),
+#   by = "Variable") %>% 
+#   
   # Compare medians for each fluid measurement across genders
   left_join(
   fluid_history %>%
