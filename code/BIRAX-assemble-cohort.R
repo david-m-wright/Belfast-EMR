@@ -39,7 +39,7 @@ RVO_patients <- copath %>%
 # Find DMO/DR patients
 DMO_DR_patients <- bind_rows(
   copath %>% 
-    filter(CoPathologyCode %in% c("R318")) %>% 
+    filter(CoPathologyCode %in% c("R318")) %>% # Note code should be R317 for DR but only lose 7 eyes when applied 
     select(PatientID, EyeCode, DiagnosisDescription_DR = CoPathologyDesc, DateofDiagnosis_DR = EncounterDate),
   
   diagnoses %>% 
