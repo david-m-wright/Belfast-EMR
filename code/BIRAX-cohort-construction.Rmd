@@ -350,7 +350,9 @@ fluid_history %>%
 va_history %>% 
   filter(baseline),
 by = c("PatientID", "EyeCode")) %>% 
-  mutate(va_category_snellen = fct_relabel(va_category_snellen, ~str_replace(., " (?=\\()", "\n")),
+  mutate(va_category_snellen = fct_relabel(va_category_snellen, ~str_replace(., "Blind", "Low vision")),
+         va_category_snellen = fct_relabel(va_category_snellen, ~str_replace(., "<=", "\U2264")),
+         va_category_snellen = fct_relabel(va_category_snellen, ~str_replace(., " (?=\\()", "\n")),
          `AMD type` = amd_type) %>% 
   count(`AMD type`, va_category_snellen, name = "Eyes") %>%
   ggplot(aes(y = va_category_snellen)) +
@@ -413,9 +415,9 @@ fluid_history %>%
 
 ```{r fluid-baseline, warning=FALSE}
 bind_rows(
-fluid_history %>% 
+  fluid_history %>% 
   filter(baseline) %>% 
-  select(TRFVolumeNl, SRFVolumeNl, IRFVolumeNl, `PED volume[nl]`, `CST[um]`, `CSV[nl]`) %>% 
+  select(TRFVolumeNl, SRFVolumeNl, IRFVolumeNl, PED, `PED volume[nl]`, `CST[um]`, `CSV[nl]`) %>% 
   GenerateDescriptives(),
 
 fluid_history %>% 
@@ -445,6 +447,21 @@ fluid_history %>%
    kable_paper()
 ```
 
+```{r ped-baseline}
+bind_rows(
+  fluid_history %>% 
+    filter(baseline, PED==1) %>% 
+    select(`PED volume[nl]`) %>% 
+    GenerateDescriptives(),
+  fluid_history %>% 
+    filter(baseline, PED==1) %>% 
+    select(`PED volume[nl]`) %>% 
+    GenerateDescriptives(type = c(`PED volume[nl]` = "Median (IQR)"))
+) %>% 
+   
+  kbl(caption = "Distribution of NOA OCT PED measurements at baseline. Fluid measurements are only across those with PED.") %>% 
+   kable_paper()
+```
 
 ```{r fluid-baseline-by-age, warning=FALSE}
 fluid_history %>% 

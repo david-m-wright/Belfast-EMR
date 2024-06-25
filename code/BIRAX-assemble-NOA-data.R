@@ -182,4 +182,60 @@ noa <- noa_raw %>%
 # 
 #  fs::file_move(pull(oct_to_move, FileName), new_path = "E:\\BIRAX\\HEYEX_Outputs")
 
+### Processing DMO scans ###
+# 
+# # Prioritise these eyes that are excluded solely because they have no fluid measurements
+# priority <- fread("F:/DMO-batch1/priority-OCTs.csv")
+# 
+# # From RT-cohort-construction.R
+# oct_volumes_priority <- oct_volumes[priority, on = .(PatientID = PatientID, EyeCode = EyeCode)][,
+#                 # Generate the root filenames to search for
+#                  GenFileName := paste(PatientID, 
+#                                       if_else(EyeCode == "R", "OD", "OS"),
+#                                       format(ExamDate, format = "%Y%m%d"),
+#                                       sep = "_"
+#                                       )]
+# 
+# 
+# # Unprocessed OCTs
+# oct_available <- list.files(path = "F:\\Excluded_OCT_Scans\\", pattern = ".avi") %>%
+#   enframe(name = NULL, value = "FileName") %>%
+#   # If there are multiple AVIs on the same date, keep them all
+#   mutate(GenFileName = str_remove(FileName, "(_[0-9]{3})?.avi$")) %>% 
+#   data.table()
+# 
+# # 
+# # oct_to_process <- oct_volumes_priority[oct_available, on = .(GenFileName = GenFileName)][
+# #   , FileName := paste0("F:\\Excluded_OCT_Scans\\", FileName)
+# # ][!is.na(FileName)]
+# 
+# oct_to_process <- oct_available[oct_volumes_priority, on = .(GenFileName = GenFileName)][!is.na(FileName)][
+#   , FileName := paste0("F:\\Excluded_OCT_Scans\\", FileName)
+# ]
+# 
+#  fs::file_move(oct_to_process$FileName, new_path = "F:\\DMO-batch1\\HEYEX_Outputs")
+# 
+#  
+# ## Making DMO study batches
+# 
+# # First batch sent to other machine
+# batch1 <- read_csv("F:\\dmo-batch1.csv") %>% 
+#   rename(FileName = filename)
+#  
+#  
+# # batch 1 OCTs on this machine
+# oct_available <- list.files(path = "F:\\DMO-batch1\\HEYEX_Outputs", pattern = ".avi") %>%
+#   enframe(name = NULL, value = "FileName") %>%
+#   # If there are multiple AVIs on the same date, keep them all
+#   mutate(GenFileName = str_remove(FileName, "(_[0-9]{3})?.avi$")) %>% 
+#   data.table()
+# 
+# oct_to_process <- anti_join(oct_available, batch1,
+#           by = c("FileName" = "FileName")) %>%
+#    mutate(FileName = paste0("F:\\DMO-batch1\\HEYEX_Outputs\\", FileName))
+# 
+# fs::file_move(oct_to_process$FileName[1:3832], new_path = "F:\\DMO-batch4\\HEYEX_Outputs")
+# 
+#  
+#  
 ### End of NOA machine section ###
