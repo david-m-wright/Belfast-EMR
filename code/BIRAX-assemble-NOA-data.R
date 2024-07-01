@@ -238,4 +238,14 @@ noa <- noa_raw %>%
 # 
 #  
 #  
+
+### Processing all remaining scans ###
+
+# # Split into three equally sized batches for the three GPU machines
+# oct_available <- list.files(path = "F:\\Excluded_OCT_scans", pattern = ".avi", full.names = TRUE)
+# 
+# fs::file_move(
+#   oct_available[cut_number(1:length(oct_available), n =3, labels = FALSE) == 1],
+#               new_path = "F:\\BIRAX-non-cohort-batch3\\HEYEX_Outputs")
+
 ### End of NOA machine section ###
