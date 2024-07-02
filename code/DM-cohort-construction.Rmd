@@ -1,0 +1,122 @@
+---
+title: "Diabetes study - Cohort construction"
+author: "David M Wright - d.wright@qub.ac.uk"
+date: "Document compiled: `r Sys.Date()`"
+output: 
+  bookdown::html_document2:
+     toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(knitr)
+library(kableExtra)
+library(rprojroot)
+library(tidyverse)
+library(broom)
+```
+
+`r R.version.string`   
+
+# Introduction
+
+```{r run-analysis, include=FALSE}
+source(find_rstudio_root_file("Code/DM-cohort-construction.R"))
+```
+
+This analysis is of Electronic Medical Records (EMR) from the Belfast Health and Social Care Trust Macular Service extracted over the period `r min(as.Date(encounters$EncounterDate))` to `r max(as.Date(encounters$ExtractDate))`. The aim of the study is to investigate treatment outcomes among patients with Diabetes Mellitus (DM).
+
+This document describes construction of the analysis cohort. Pre-processing of the Medisoft data is described in `BIRAX-assemble-Medisoft-data.html`.
+
+ 
+# Cohort construction
+
+Data were extracted on `r as.Date(max(patients$ExtractDate))`. A proportion of event dates were after the recorded `ExtractDate`. For example, in the `Encounters` table `r nrow(filter(encounters, EncounterDate > ExtractDate))` records had an `EncounterDate` after the `ExtractDate`. This is related to the date perturbation used by Medisoft to maintain patient anonymity in the extract.
+
+The following steps were taken to process the data.   
+
+Identification of patients with diabetes:
+
+* Patient was recorded in the `BELDiabeticDiagnosis` table   
+* Or had diabetic retinopathy recorded:   
+  + `CoPathologyCode` R317 in `BELCoPathology` table   
+  + or `DiagnosisDescription` containing "diabetic retinopathy" in `BELDiagnoses`   
+  + or `ClinicalTermDescription` containing "diabetic retinopathy" in `BELClinicalFindings`   
+  + or `DRAsessmentDesc` not containing "DMO, oedema, CSMO or none" in `BELDRAssessment`   
+* Or had diabetic macular oedema recorded:   
+  + or `DiagnosisDescription` containing "diabetic macular oedema" in `BELDiagnoses`   
+  + or `ClinicalTermDescription` containing "diabetic macular oedema" in `BELClinicalFindings`   
+  + or `DRAsessmentDesc` containing "DMO, oedema, CSMO" in `BELDRAssessment`
+
+
+## Inclusion and exclusion criteria
+
+Data were extracted by Medisoft with the following inclusion and  exclusion criteria. 
+
+Inclusion: "Any patient having attended the BHSCT macular treatment service at least once during the period May 2008 to May 2018 with a diagnosis of AMD, DR/DMO or RVO."   
+Exclusion: "Any patient marked as a test patient."
+
+EMR for a total of `r nrow(patients)` patients were included in the extracted dataset. The unit of analysis is the eye so criteria were applied at the eye level:   
+
+* The raw data potentially contained `r nrow(eye_raw_dm)` eyes (some were not noted in any of the tables and so assumed normal).   
+* `r nrow(filter(eye_raw_dm, exclude_no_dm))` eyes had no diagnosis of DM and were excluded.    
+
+This left `r nrow(filter(eye_raw_dm, !exclude_no_dm))` DM eyes from `r nrow(distinct(filter(eye_raw_dm, !exclude_no_dm), PatientID))` patients.
+
+* `r nrow(filter(eye_raw_dm, !exclude_no_dm, exclude_no_va))` eyes did not have a visual acuity assessment within 2 weeks prior to or including the index date and were excluded.   
+
+* `r nrow(filter(eye_raw_dm, !exclude_no_dm, !exclude_no_va, exclude_no_thickness))` eyes did not have any OCT retinal thickness measurements (indicative of a usable volume scan) at any point.   
+
+A total of `r nrow(eye_dm)` eyes from `r nrow(distinct(eye_dm, PatientID))` patients remained after these exclusions. 
+
+# Descriptive statistics at baseline
+
+Descriptive statistics for the eyes included in the analysis are given in Tables \@ref(tab:descriptives) to \@ref(tab:va-baseline). Statistics are presented at the eye level. 
+
+## Patient characteristics
+
+```{r descriptives}
+bind_rows(
+  eye_dm %>%
+    transmute(Age = index_age) %>%
+    GenerateDescriptives(),
+  eye_dm %>%
+    transmute(Age = index_age, Gender, Eyes = " ") %>%
+    GenerateDescriptives(type = c(Age = "Mean (Range)"))
+) %>%
+  kbl(caption = "Baseline characteristics of eyes with DM. Frequency and percentage reported for categorical variables.") %>%
+  kable_paper()
+```
+
+```{r follow-up-length}
+eye_dm %>% 
+  transmute(Eyes = " ",
+            `Years followup` = years_followup,
+            Encounters = encounters,
+            `OCT thickness measurements` = oct_thickness_n            
+            
+            ) %>% 
+  GenerateDescriptives(type = c(`Years followup` = "Median (Range)", 
+                                Encounters = "Median (Range)",
+                                `OCT thickness measurements` = "Median (Range)")) %>%
+ kbl(caption = "Length of follow-up, number of clinic encounters (both virtual and in-person) and number of OCT thickness measurements.") %>% 
+  kable_paper()
+
+```
+
+```{r va-baseline}
+bind_rows(
+  va_history_dm %>% 
+    filter(baseline) %>% 
+    transmute(va_logmar) %>% 
+    GenerateDescriptives(),
+va_history_dm %>% 
+  filter(baseline) %>% 
+  transmute(va_logmar, va_etdrs, va_category_snellen, Eyes = "n") %>% 
+  GenerateDescriptives(type = c(va_logmar = "Median (IQR)", va_etdrs = "Median (IQR)"))) %>% 
+  left_join(var_desc, by = "Variable") %>%
+  mutate(Description = coalesce(Description, Variable)) %>%
+  select(Description, everything(), -Variable) %>%
+  kbl(caption = "Distribution of visual acuity outcomes at baseline.") %>% 
+  kable_paper()
+```

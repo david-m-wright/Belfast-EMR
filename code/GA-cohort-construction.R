@@ -84,7 +84,7 @@ va_raw_ga <- followup_ga[, .(PatientID, EyeCode, DateofDiagnosis_GA)][
         , baseline := abs(months_since_index) == min(abs(months_since_index)), by = .(PatientID, EyeCode)]
 
 
-
+# List of candidate eyes
 eye_raw_ga  <- 
 
   # All patients
