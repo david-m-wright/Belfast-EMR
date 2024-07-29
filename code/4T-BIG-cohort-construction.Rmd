@@ -1,0 +1,76 @@
+---
+title: "4T-BIG and fibrosis studies - Cohort construction"
+author: "David M Wright - d.wright@qub.ac.uk"
+date: "`r Sys.Date()`"
+output: 
+  bookdown::html_document2:
+     toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(knitr)
+library(kableExtra)
+library(rprojroot)
+library(tidyverse)
+library(broom)
+```
+
+`r R.version.string`   
+
+# Introduction
+
+```{r run-analysis, include=FALSE}
+source(find_rstudio_root_file("Code/4T-BIG-cohort-construction.R"))
+```
+
+This analysis is of Electronic Medical Records (EMR) from the Belfast Health and Social Care Trust Macular Service extracted over the period `r min(as.Date(encounters$EncounterDate))` to `r max(as.Date(encounters$ExtractDate))`. The aim of the study is to investigate responses to long-term AMD treatment as part of the 4T-BIG and fibrosis studies.
+
+This document describes construction of the analysis cohort. Pre-processing of the EMR (Medisoft) is described in `BIRAX-assemble-Medisoft-data.html` and `BIRAX-assemble-cohort-html`.
+
+
+# Cohort construction
+
+Data were extracted on `r as.Date(max(patients$ExtractDate))`. A proportion of event dates were after the recorded `ExtractDate`. For example, in the `Encounters` table `r nrow(filter(encounters, EncounterDate > ExtractDate))` records had an `EncounterDate` after the `ExtractDate`. This is related to the date perturbation used by Medisoft to maintain patient anonymity in the extract.
+
+Additional steps specific to this analysis were:
+
+* Identified the first injection recorded for each patient in either eye and the date (the index date).       
+* Calculated the time between the index date and each follow-up visit with imaging (potentially negative for visits before the index date).   
+* Generated a visit sequence for each eye, with visit 0 at the index date, negative values prior to the index date and positive values after.   
+* Compiled the events recorded at each visit by eye (injection, visual acuity, OCT, fluorescein angiogram, multicolour fundus photograph).   
+* Filtered visits to retain only those in which any of the events of interested (listed above) occurred.   
+
+
+## Inclusion and exclusion criteria
+
+Data were extracted by Medisoft with the following inclusion and  exclusion criteria. 
+
+Inclusion: "Any patient having attended the BHSCT macular treatment service at least once during the period May 2008 to May 2018 with a diagnosis of AMD, DR/DMO or RVO."   
+Exclusion: "Any patient marked as a test patient."
+
+
+The unit of analysis is the person so criteria were applied at the person level:   
+
+* The raw data contained `r nrow(patients)` patients.  
+* Of these, `r nrow(namd_baseline)` patients had a valid baseline visits (including and injection and OCT imaging) and an AMD diagnosis.   
+* _4T-BIG_ cohort: of these, `r patients_3yr_exact[index_visit==TRUE, visits]` patients had a visit at 3yrs (within a month).   
+* _fibrosis_ cohort: of these, `r patients_7yr_exact[index_visit==TRUE, visits]` patients had a visit at 7yrs (within a month).   
+
+The distribution of events for each cohort is given in Tables \@ref(tab:4T-BIG) and \@ref(tab:fibrosis). 
+
+
+```{r 4T-BIG}
+patients_3yr_exact %>% 
+  adorn_totals() %>% 
+  kbl(caption = "Distribution of events for the 4T-BIG cohort.") %>% 
+  kable_paper()
+```
+
+```{r fibrosis}
+patients_7yr_exact %>% 
+  adorn_totals() %>% 
+  kbl(caption = "Distribution of events for the fibrosis.") %>% 
+  kable_paper()
+```
+
