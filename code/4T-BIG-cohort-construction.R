@@ -2,14 +2,14 @@
 
 library(tidyverse)
 library(lubridate)
+library(fs)
 
 # This is a subset of the main BIRAX cohort
 source(rprojroot::find_rstudio_root_file("code/BIRAX-assemble-cohort.R"))
 
-# Prepare dataset
+## Prepare dataset
 
-
-# Details of all the examinations that were extracted
+# Details of all the examinations that were extracted with imaging
 # Note that there were multiple ExamIDs and SeriesIDs (scans within exams) on some dates
 oct_details <- fread(file = file.path(file_path, "OCT_ImageVariables.txt"))
 oct_details[, c("StartCoordX", "StartCoordY") := lapply(.SD, as.numeric), .SDcols = c("StartCoordX", "StartCoordY")]
@@ -20,14 +20,12 @@ setkey(oct_details, FilePath)
 # Assumes there was a problem with the earlier scan
 oct_volumes <- unique(oct_details[ModalityType == "Volume" & ModalityProcedure == "IR_OCT" & ImageType == "OCT",], by = c("PatientID", "EyeCode", "ExamDate"), fromLast = TRUE)
 
-# List of all dates where an OCT multicolour photograph was taken
+# List of all dates where an OCT multicolour photograph was taken (again, take last scan if there were multiple on the same date)
 oct_multicol <- unique(oct_details[ModalityType == "Single" & ModalityProcedure == "MC" & ImageType == "ANGIO",], by = c("PatientID", "EyeCode", "ExamDate"), fromLast = TRUE)
 
-# List of all dates where a fluorsecein angiongram (OCT) was taken
-oct_fa <- unique(oct_details[(ModalityProcedure == "FA_OCT" & ModalityType == "Volume"),], by = c("PatientID", "EyeCode", "ExamDate"), fromLast = TRUE)
-# (ModalityProcedure == "FA" & ModalityType == "SteroPair")
+# List of all dates where a fluorescein angiogram (en face) was taken (again, take last scan if there were multiple on the same date)
+oct_fa <- unique(oct_details[(ModalityProcedure == "FA" & ModalityType == "Single"),], by = c("PatientID", "EyeCode", "ExamDate"), fromLast = TRUE)
 
-  
 # For each patient calculate the time since the first injection in either eye (first eye index_date)
 index_dates_4t <- as.data.table(injection_summary_eye)[, .(index_date = min(index_date)), by = PatientID]
 
@@ -35,7 +33,7 @@ index_dates_4t <- as.data.table(injection_summary_eye)[, .(index_date = min(inde
 visits_4t <- index_dates_4t[
   distinct(encounters_raw, PatientID, EncounterDate), on = c("PatientID"), nomatch = 0]
 setkey(visits_4t, PatientID, EncounterDate)
- # Give each patient a visit sequence   
+ # Give each patient a visit ID   
 visits_4t[, visit_number := dense_rank(EncounterDate), by = PatientID]  
 
 # Mark the index visit
@@ -46,12 +44,12 @@ visits_4t[, visit_sequence := visit_number - visit_number[index_visit], by = Pat
 visits_4t[, months_since_index := interval(index_date, EncounterDate)/dmonths()]
 
 # Note that some visits did not have any imaging
-encounters_raw[PatientID == "FC9B5F4A-EE14-2E67-8E4E-EB5C162C6D71" & EncounterDate >= "2017-07-22"][order(EncounterDate)]
+# encounters_raw[PatientID == "FC9B5F4A-EE14-2E67-8E4E-EB5C162C6D71" & EncounterDate >= "2017-07-22"][order(EncounterDate)]
 
 
 # Put all measurements taken in each visit together
-visits_4t_summary <- 
-visits_4t %>%
+visits_4t_summary <- visits_4t %>%
+  
   # Indicate if injection occurred.
   left_join(
     dcast(as.data.table(injections_clean)[, .(PatientID, EyeCode = paste0("inj_", EyeCode), EncounterDate = as.POSIXct(EncounterDate), 
@@ -104,7 +102,7 @@ visits_4t %>%
  
 
 
-# Active nAMD at baseline
+# Inclusion criterion: active nAMD at baseline
 # This will always contain the first eye or both if a bilateral case
 namd_baseline <-  visits_4t_summary[index_visit == TRUE & 
                                         ((inj_R == 1 & amd_R == 1)|
@@ -122,7 +120,7 @@ namd_baseline[inj_R == TRUE,] %>%
   count(va_R, oct_R, multicol_R, fa_R, no_multicol_R) %>% 
   adorn_totals("row")
 
-# Imaging by months since baseline
+# Distribution of imaging by months since baseline
 # Available imaging after >5 years followup
 namd_baseline[inj_L == TRUE & no_multicol_L == TRUE,.(PatientID)][
   visits_4t_summary, on = "PatientID", nomatch =0][
@@ -150,7 +148,6 @@ namd_baseline[inj_R == TRUE & no_multicol_R == TRUE,.(PatientID)][
                              # by = .(PatientID, months_since_index)
     ] %>% count(va_R, oct_R, multicol_R, fa_R) %>% 
   adorn_totals("row")
-
 
 
 # Available imaging after 7 years followup
@@ -182,26 +179,8 @@ namd_baseline[inj_R == TRUE & no_multicol_R == TRUE,.(PatientID)][
   adorn_totals("row")
 
 
-# Count visits and images for patients with followup >7 years after index date
-patients_7yr <- distinct(namd_baseline[(inj_R == T & oct_R == 1)|(inj_L == T & oct_L == 1),.(PatientID)][
-  visits_4t_summary, on = "PatientID", nomatch =0][
-  months_since_index >=84 & (oct_L == 1 | oct_R == 1), .(PatientID)])[
-    visits_4t_summary, on = "PatientID", nomatch = 0
-  ][, months_since_index := floor(months_since_index)][,
-    .(visits = .N,
-      injections = sum(inj_L+inj_R),
-      va_measurements = sum(va_L + va_R),
-      oct = sum(oct_L + oct_R),
-      multicolour = sum(multicol_L + multicol_R),
-      fa = sum(fa_L + fa_R)),
-      by = .(months_since_index, index_visit)][
-        order(months_since_index)
-      ] 
 
-fwrite(patients_7yr, find_rstudio_root_file("data", "output", "7yr_followup.csv"))
-
-
-### Cohorts
+### Cohorts ####
 
 ## 4T-BIG study
 
@@ -227,32 +206,138 @@ patients_3yr_exact <- distinct(namd_baseline[(inj_R == T & oct_R == 1)|(inj_L ==
 
 
 ## Fibrosis project
-# Only include patients with a visit at exactly 7 years
-# Patietns with a valid baseline (injection and OCT in either eye)
-patients_7yr_exact <- distinct(namd_baseline[(inj_R == T & oct_R == 1)|(inj_L == T & oct_L == 1),.(PatientID)][
+
+# List of patient visits with imaging status 
+# Only include patients with a visit at exactly 6 years
+patients_6yr_exact_list <- distinct(namd_baseline[(inj_R == T & oct_R == 1)|(inj_L == T & oct_L == 1),.(PatientID)][
   # Joined to visit summary
   visits_4t_summary, on = "PatientID", nomatch =0][
-    # Just patients with a visit in the 84th month (double)
-    months_since_index >=84 & months_since_index < 85 & (oct_L == 1 | oct_R == 1), .(PatientID)])[
+    # Just patients with an OCT visit in the 72nd month (double)
+    months_since_index >=72 & months_since_index < 73 & (oct_L == 1 | oct_R == 1), .(PatientID)])[
       visits_4t_summary, on = "PatientID", nomatch = 0
-    ][
+    ]
+# fwrite(patients_6yr_exact_list, "F:\\Fibrosis\\visit-list.csv"))
+
+
+# Patients with a valid baseline (injection and OCT in either eye)
+patients_6yr_exact <- patients_6yr_exact_list[
       # Convert time since index to integer
       , months_since_index := floor(months_since_index)][
         # Calculate number of visits/images by month
         ,
-                                                         .(visits = .N,
-                                                           injections = sum(inj_L+inj_R),
-                                                           va_measurements = sum(va_L + va_R),
-                                                           oct = sum(oct_L + oct_R),
-                                                           multicolour = sum(multicol_L + multicol_R),
-                                                           fa = sum(fa_L + fa_R)),
-                                                         by = .(months_since_index, index_visit)][
-                                                           order(months_since_index)
-                                                         ][
-                                                           # Retain only first 7 years of followup
-      months_since_index <=84 ] 
-# fwrite(patients_7yr_exact, find_rstudio_root_file("data", "output", "7yr-followup-exact.csv"))
+        .(visits = .N,
+          injections = sum(inj_L+inj_R),
+          va_measurements = sum(va_L + va_R),
+          oct = sum(oct_L + oct_R),
+          multicolour = sum(multicol_L + multicol_R),
+          fa = sum(fa_L + fa_R)),
+        by = .(months_since_index, index_visit)][
+          order(months_since_index)
+        ][
+          # Retain only first 7 years of followup
+          months_since_index <=72 ] 
+# fwrite(patients_6yr_exact, find_rstudio_root_file("data", "output", "6yr-followup-exact.csv"))
 
+
+# 
+# distinct(namd_baseline[(inj_R == T & oct_R == 1)|(inj_L == T & oct_L == 1),.(PatientID)][
+#        visits_4t_summary, on = "PatientID", nomatch =0][
+#              months_since_index >=84 & months_since_index < 85 & (oct_L == 1 | oct_R == 1), .(PatientID)])[
+#                    visits_4t_summary, on = "PatientID", nomatch = 0
+#                ][PatientID == "FC9B5F4A-EE14-2E67-8E4E-EB5C162C6D71"]
+# 
+# encounters_raw[PatientID == "FC9B5F4A-EE14-2E67-8E4E-EB5C162C6D71" & EncounterDate >= "2017-07-22"][order(EncounterDate)]
+
+
+# 
+# 
+# distinct(namd_baseline[(inj_R == T & oct_R == 1)|(inj_L == T & oct_L == 1),.(PatientID)][
+#   visits_4t_summary, on = "PatientID", nomatch =0][
+#     months_since_index >=84 & months_since_index < 85 & (oct_L == 1 | oct_R == 1), .(PatientID)])[
+#       visits_4t_summary, on = "PatientID", nomatch = 0
+#     ][
+#       months_since_index >=84 & months_since_index <85 ] 
+# 
+# encounters_raw[PatientID == "0AE95C3D-873D-B865-346F-2502DFCFD372" & EncounterDate >= "2018-06-02" & EncounterDate <= "2018-06-16",]
+# 
+
+
+
+### Extract full imaging dataset for the selected cohort ###
+
+# OCT scan metadata
+oct_volume_metadata <- oct_volumes[patients_6yr_exact_list[, .(PatientID, EncounterDate)], on = c("PatientID","ExamDate" = "EncounterDate"), nomatch = 0]
+
+# Find all the BMP files associated with the selected OCT volumes
+# Get the names and paths to the OCT volumes
+fnames <- oct_volume_metadata %>% 
+  select(FilePath) %>% 
+  # slice(1:5) %>% 
+  separate_wider_regex(cols = "FilePath", patterns = c(patientpath = ".*", volpath =  "\\\\Volume\\\\", volname = ".*", "-", suffix = ".*"))
+
+# Find all the slice filenames (6mins)
+oct_slices_fnames <- map2(.x = paste0(fnames$patientpath, fnames$volpath), .y = fnames$volname, ~list.files(path = paste0("F:\\BIRAX_ProcessedOutputs", .x), pattern = .y, full.names = TRUE), .progress = TRUE) %>% 
+  list_c()
+oct_slices <- data.table(filename = oct_slices_fnames)[
+  , FilePath := str_replace(filename, "F:\\\\BIRAX_ProcessedOutputs", "")
+]
+setkey(oct_slices, FilePath)
+
+
+# out_dir <- "E:\\Fibrosis"
+# 
+# 
+# ## Copy imaging to the target directory, maintaining the source directory structure
+# 
+# # Create a directory for each individual
+# dir_create(paste0(out_dir, "\\Imaging", unique(patients_6yr_exact_list$PatientID)))
+# 
+# # Within each patient, create a directory for the OCT slices
+# dir_create(paste0(out_dir, "\\Imaging", unique(fnames$patientpath), "\\Volume"))
+# 
+# # Where present, create a directory for the multicolour enface images
+# oct_multicol_metadata <- oct_multicol[patients_6yr_exact_list[, .(PatientID, EncounterDate)], on = c("PatientID","ExamDate" = "EncounterDate"), nomatch = 0]
+# dir_create(paste0(out_dir, "\\Imaging", unique(str_extract(oct_multicol_metadata$FilePath,  ".*\\\\Single"))))
+# 
+# # Where present (and not already created for multicolour), create a directory for FA enface images 
+# # (All are numbered slice 1)
+# oct_fa_metadata <- oct_fa[patients_6yr_exact_list[, .(PatientID, EncounterDate)], on = c("PatientID","ExamDate" = "EncounterDate"), nomatch = 0]
+# dir_create(paste0(out_dir, "\\Imaging", unique(str_extract(oct_fa_metadata$FilePath,  ".*\\\\Single"))))
+# 
+# 
+# # Populate with filtered scans
+# # OCT
+# file_copy(oct_slices$filename, paste0(out_dir, "\\Imaging", oct_slices$FilePath))
+# # Multicolour (8 mins - 12Gb)
+# file_copy(paste0("F:\\BIRAX_ProcessedOutputs", oct_multicol_metadata$FilePath), paste0(out_dir, "\\Imaging", oct_multicol_metadata$FilePath))
+# # FA
+# file_copy(paste0("F:\\BIRAX_ProcessedOutputs", oct_fa_metadata$FilePath), paste0(out_dir, "\\Imaging", oct_fa_metadata$FilePath))
+# 
+# 
+# 
+# ## Output the metadata 
+# 
+# dir_create(paste0(out_dir, "\\Metadata"))
+# # For OCT, output a row for each slice.
+# fwrite(oct_details[oct_slices, on = "FilePath", nomatch = 0], paste0(out_dir, "\\Metadata", "\\OCT-slice-metadata.csv"))
+# # For multiocolour and FA, a single row for each enface image
+# fwrite(oct_multicol_metadata, paste0(out_dir, "\\Metadata", "\\multicol-metadata.csv"))
+# fwrite(oct_fa_metadata, paste0(out_dir, "\\Metadata", "\\fa-metadata.csv"))
+# 
+# # 14:53 multicol
+# # 15:11 OCT
+# 
+# 
+### Extract cliniial data for the selected cohort ###
+
+# oct_volumes[patients_6yr_exact_list[, .(PatientID, EncounterDate)], on = c("PatientID","ExamDate" = "EncounterDate"), nomatch = 0]
+
+
+# Cohort overlap.
+
+
+
+####################################
 
 ## Other potential cohorts
 
@@ -309,13 +394,33 @@ patients_5yr_exact <- distinct(namd_baseline[(inj_R == T & oct_R == 1)|(inj_L ==
           months_since_index <=60 ] 
 # fwrite(patients_5yr_exact, find_rstudio_root_file("data", "output", "5yr-followup-exact.csv"))
 
-# Only include patients with a visit at exactly 6 years
+
+# Count visits and images for patients with followup >7 years after index date
+patients_7yr <- distinct(namd_baseline[(inj_R == T & oct_R == 1)|(inj_L == T & oct_L == 1),.(PatientID)][
+  visits_4t_summary, on = "PatientID", nomatch =0][
+    months_since_index >=84 & (oct_L == 1 | oct_R == 1), .(PatientID)])[
+      visits_4t_summary, on = "PatientID", nomatch = 0
+    ][, months_since_index := floor(months_since_index)][,
+                                                         .(visits = .N,
+                                                           injections = sum(inj_L+inj_R),
+                                                           va_measurements = sum(va_L + va_R),
+                                                           oct = sum(oct_L + oct_R),
+                                                           multicolour = sum(multicol_L + multicol_R),
+                                                           fa = sum(fa_L + fa_R)),
+                                                         by = .(months_since_index, index_visit)][
+                                                           order(months_since_index)
+                                                         ] 
+
+# fwrite(patients_7yr, find_rstudio_root_file("data", "output", "7yr_followup.csv"))
+
+
+# Only include patients with a visit at exactly 7 years
 # Patietns with a valid baseline (injection and OCT in either eye)
-patients_6yr_exact <- distinct(namd_baseline[(inj_R == T & oct_R == 1)|(inj_L == T & oct_L == 1),.(PatientID)][
+patients_7yr_exact <- distinct(namd_baseline[(inj_R == T & oct_R == 1)|(inj_L == T & oct_L == 1),.(PatientID)][
   # Joined to visit summary
   visits_4t_summary, on = "PatientID", nomatch =0][
-    # Just patients with a visit in the 72nd month (double)
-    months_since_index >=72 & months_since_index < 73 & (oct_L == 1 | oct_R == 1), .(PatientID)])[
+    # Just patients with a visit in the 84th month (double)
+    months_since_index >=84 & months_since_index < 85 & (oct_L == 1 | oct_R == 1), .(PatientID)])[
       visits_4t_summary, on = "PatientID", nomatch = 0
     ][
       # Convert time since index to integer
@@ -332,29 +437,9 @@ patients_6yr_exact <- distinct(namd_baseline[(inj_R == T & oct_R == 1)|(inj_L ==
           order(months_since_index)
         ][
           # Retain only first 7 years of followup
-          months_since_index <=72 ] 
-# fwrite(patients_6yr_exact, find_rstudio_root_file("data", "output", "6yr-followup-exact.csv"))
+          months_since_index <=84 ] 
+# fwrite(patients_7yr_exact, find_rstudio_root_file("data", "output", "7yr-followup-exact.csv"))
 
 
-# 
-# distinct(namd_baseline[(inj_R == T & oct_R == 1)|(inj_L == T & oct_L == 1),.(PatientID)][
-#        visits_4t_summary, on = "PatientID", nomatch =0][
-#              months_since_index >=84 & months_since_index < 85 & (oct_L == 1 | oct_R == 1), .(PatientID)])[
-#                    visits_4t_summary, on = "PatientID", nomatch = 0
-#                ][PatientID == "FC9B5F4A-EE14-2E67-8E4E-EB5C162C6D71"]
-# 
-# encounters_raw[PatientID == "FC9B5F4A-EE14-2E67-8E4E-EB5C162C6D71" & EncounterDate >= "2017-07-22"][order(EncounterDate)]
 
-
-# 
-# 
-# distinct(namd_baseline[(inj_R == T & oct_R == 1)|(inj_L == T & oct_L == 1),.(PatientID)][
-#   visits_4t_summary, on = "PatientID", nomatch =0][
-#     months_since_index >=84 & months_since_index < 85 & (oct_L == 1 | oct_R == 1), .(PatientID)])[
-#       visits_4t_summary, on = "PatientID", nomatch = 0
-#     ][
-#       months_since_index >=84 & months_since_index <85 ] 
-# 
-# encounters_raw[PatientID == "0AE95C3D-873D-B865-346F-2502DFCFD372" & EncounterDate >= "2018-06-02" & EncounterDate <= "2018-06-16",]
-# 
 

@@ -49,13 +49,12 @@ Data were extracted by Medisoft with the following inclusion and  exclusion crit
 Inclusion: "Any patient having attended the BHSCT macular treatment service at least once during the period May 2008 to May 2018 with a diagnosis of AMD, DR/DMO or RVO."   
 Exclusion: "Any patient marked as a test patient."
 
-
 The unit of analysis is the person so criteria were applied at the person level:   
 
 * The raw data contained `r nrow(patients)` patients.  
-* Of these, `r nrow(namd_baseline)` patients had a valid baseline visits (including and injection and OCT imaging) and an AMD diagnosis.   
+* Of these, `r nrow(namd_baseline)` patients had a valid baseline visits (including an injection and OCT imaging) and an AMD diagnosis.   
 * _4T-BIG_ cohort: of these, `r patients_3yr_exact[index_visit==TRUE, visits]` patients had a visit at 3yrs (within a month).   
-* _fibrosis_ cohort: of these, `r patients_7yr_exact[index_visit==TRUE, visits]` patients had a visit at 7yrs (within a month).   
+* _fibrosis_ cohort: of these, `r patients_6yr_exact[index_visit==TRUE, visits]` patients had a visit at 6yrs (within a month).   
 
 The distribution of events for each cohort is given in Tables \@ref(tab:4T-BIG) and \@ref(tab:fibrosis). 
 
@@ -68,9 +67,37 @@ patients_3yr_exact %>%
 ```
 
 ```{r fibrosis}
-patients_7yr_exact %>% 
+patients_6yr_exact %>% 
   adorn_totals() %>% 
   kbl(caption = "Distribution of events for the fibrosis.") %>% 
   kable_paper()
 ```
+
+## Folder structure      
+
+Each patient has a folder named with their unique ID (36 character string). Within each is a `Volume` subfolder which contains the B-scans from the selected OCT volumes. The filenames contains the following elements separted by underscores:    
+
+* Series number
+* Progression number   
+* Laterality (`R/L`)   
+* Modality (`IR_OCT`)    
+* Date (YYYYMMDD)    
+* Image sequence (slice number, starting at 1)   
+* Image ID    
+
+Where a patient also has multicolour or FA images, these are stored in a `Single` subfolder. The naming convention is the same as for the B-scans.
+
+
+## Meta-data
+
+The meta-data to accompany the images is stored in three files, one for each modality, an example given in \@ref(tab:meta-data).
+
+```{r meta-data}
+oct_details[oct_slices, on = "FilePath", nomatch = 0][1:10, ] %>% 
+  select(-filename) %>% 
+  kbl(caption = "Imaging meta-data.") %>% 
+  kable_paper()
+```
+
+
 
