@@ -22,7 +22,6 @@ oct_volumes <- unique(oct_details[ModalityType == "Volume" & ModalityProcedure =
                 # Add a volume identifier
                 volume_id := str_replace(FilePath, "(.*\\\\Volume\\\\.*)(-.*)", "\\1")]
 
-
 # List of all dates where an OCT multicolour photograph was taken (again, take last scan if there were multiple on the same date)
 oct_multicol <- unique(oct_details[ModalityType == "Single" & ModalityProcedure == "MC" & ImageType == "ANGIO",], by = c("PatientID", "EyeCode", "ExamDate"), fromLast = TRUE)
 
@@ -268,8 +267,13 @@ patients_6yr_exact <- patients_6yr_exact_list[
 
 ### Extract full imaging dataset for the selected cohort ###
 
+# All injections as data.table for meta data
+injections_dt <- data.table(injections_clean)[, .(PatientID, EyeCode, ExamDate = EncounterDate, injection = 1)]
+
 # OCT scan metadata
-oct_volume_metadata <- oct_volumes[patients_6yr_exact_list[, .(PatientID, EncounterDate, visit_sequence, months_since_index)], on = c("PatientID","ExamDate" = "EncounterDate"), nomatch = 0]
+oct_volume_metadata <- injections_dt[
+  oct_volumes[patients_6yr_exact_list[, .(PatientID, EncounterDate, visit_sequence, months_since_index)], on = c("PatientID","ExamDate" = "EncounterDate"), nomatch = 0],
+  on = c("PatientID", "EyeCode", "ExamDate")][, injection := if_else(is.na(injection), 0, injection)]
 
 # Find all the BMP files associated with the selected OCT volumes
 # Get the names and paths to the OCT volumes
@@ -301,12 +305,21 @@ out_dir <- find_rstudio_root_file("data", "output", "Fibrosis")
 # dir_create(paste0(out_dir, "\\Imaging", unique(fnames$patientpath), "\\Volume"))
 # 
 # # Where present, create a directory for the multicolour enface images
-# oct_multicol_metadata <- oct_multicol[patients_6yr_exact_list[, .(PatientID, EncounterDate, visit_sequence, months_since_index)], on = c("PatientID","ExamDate" = "EncounterDate"), nomatch = 0]
+oct_multicol_metadata <- oct_multicol[patients_6yr_exact_list[, .(PatientID, EncounterDate, visit_sequence, months_since_index)], on = c("PatientID","ExamDate" = "EncounterDate"), nomatch = 0]
+
+oct_multicol_metadata[]
+as.data.table(injections_clean)[, .(PatientID, EyeCode, EncounterDate)]
+
+# [, injected := 1]
+
 # dir_create(paste0(out_dir, "\\Imaging", unique(str_extract(oct_multicol_metadata$FilePath,  ".*\\\\Single"))))
 # 
 # # Where present (and not already created for multicolour), create a directory for FA enface images 
 # # (All are numbered slice 1)
-# oct_fa_metadata <- oct_fa[patients_6yr_exact_list[, .(PatientID, EncounterDate, visit_sequence, months_since_index)], on = c("PatientID","ExamDate" = "EncounterDate"), nomatch = 0]
+oct_fa_metadata <- oct_fa[patients_6yr_exact_list[, .(PatientID, EncounterDate, visit_sequence, months_since_index)], on = c("PatientID","ExamDate" = "EncounterDate"), nomatch = 0]
+
+
+
 # dir_create(paste0(out_dir, "\\Imaging", unique(str_extract(oct_fa_metadata$FilePath,  ".*\\\\Single"))))
 # 
 # 
@@ -324,11 +337,13 @@ out_dir <- find_rstudio_root_file("data", "output", "Fibrosis")
 # 
 # dir_create(paste0(out_dir, "\\Metadata"))
 # # For OCT, output a row for each slice.
-# oct_details[oct_slices[oct_volume_metadata[, .(volume_id, visit_sequence, months_since_index)], on = "volume_id"], on = "FilePath", nomatch = 0] %>% 
-#   fwrite(paste0(out_dir, "\\Metadata", "\\OCT-slice-metadata.csv"))
+oct_details[oct_slices[oct_volume_metadata[, .(volume_id, visit_sequence, months_since_index, injection)], on = "volume_id"], on = "FilePath", nomatch = 0]# %>% 
+   fwrite(paste0(out_dir, "\\Metadata", "\\OCT-slice-metadata.csv"))
 # # # For multiocolour and FA, a single row for each enface image
-# fwrite(oct_multicol_metadata, paste0(out_dir, "\\Metadata", "\\multicol-metadata.csv"))
-# fwrite(oct_fa_metadata, paste0(out_dir, "\\Metadata", "\\fa-metadata.csv"))
+injections_dt[oct_multicol_metadata, on = c("PatientID", "EyeCode", "ExamDate")][, injection := if_else(is.na(injection), 0, injection)] #%>% 
+  fwrite(paste0(out_dir, "\\Metadata", "\\multicol-metadata.csv"))
+injections_dt[oct_fa_metadata, on = c("PatientID", "EyeCode", "ExamDate")][, injection := if_else(is.na(injection), 0, injection)] #%>% 
+ fwrite(paste0(out_dir, "\\Metadata", "\\fa-metadata.csv"))
 # # 
 # # 14:53 multicol
 # # 15:11 OCT
