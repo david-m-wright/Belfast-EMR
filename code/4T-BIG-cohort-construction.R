@@ -18,7 +18,10 @@ setkey(oct_details, FilePath)
 # List of all dates on which an OCT volume scan was taken 
 # When there are multiple exams on the same day, select the last (matches criteria used for raw NOA data)
 # Assumes there was a problem with the earlier scan
-oct_volumes <- unique(oct_details[ModalityType == "Volume" & ModalityProcedure == "IR_OCT" & ImageType == "OCT",], by = c("PatientID", "EyeCode", "ExamDate"), fromLast = TRUE)
+oct_volumes <- unique(oct_details[ModalityType == "Volume" & ModalityProcedure == "IR_OCT" & ImageType == "OCT",], by = c("PatientID", "EyeCode", "ExamDate"), fromLast = TRUE)[, 
+                # Add a volume identifier
+                volume_id := str_replace(FilePath, "(.*\\\\Volume\\\\.*)(-.*)", "\\1")]
+
 
 # List of all dates where an OCT multicolour photograph was taken (again, take last scan if there were multiple on the same date)
 oct_multicol <- unique(oct_details[ModalityType == "Single" & ModalityProcedure == "MC" & ImageType == "ANGIO",], by = c("PatientID", "EyeCode", "ExamDate"), fromLast = TRUE)
@@ -266,24 +269,26 @@ patients_6yr_exact <- patients_6yr_exact_list[
 ### Extract full imaging dataset for the selected cohort ###
 
 # OCT scan metadata
-oct_volume_metadata <- oct_volumes[patients_6yr_exact_list[, .(PatientID, EncounterDate)], on = c("PatientID","ExamDate" = "EncounterDate"), nomatch = 0]
+oct_volume_metadata <- oct_volumes[patients_6yr_exact_list[, .(PatientID, EncounterDate, visit_sequence, months_since_index)], on = c("PatientID","ExamDate" = "EncounterDate"), nomatch = 0]
 
 # Find all the BMP files associated with the selected OCT volumes
 # Get the names and paths to the OCT volumes
 fnames <- oct_volume_metadata %>% 
   select(FilePath) %>% 
   # slice(1:5) %>% 
-  separate_wider_regex(cols = "FilePath", patterns = c(patientpath = ".*", volpath =  "\\\\Volume\\\\", volname = ".*", "-", suffix = ".*"))
+  separate_wider_regex(cols = "FilePath", patterns = c(patientpath = ".*", volpath =  "\\\\Volume\\\\", volname = ".*", "-", suffix = ".*"), cols_remove = FALSE)
 
-# Find all the slice filenames (6mins)
+# Find all the slice filenames by searching on the volume identifier (ignoring the slice specific identifiers) (6mins)
 oct_slices_fnames <- map2(.x = paste0(fnames$patientpath, fnames$volpath), .y = fnames$volname, ~list.files(path = paste0("F:\\BIRAX_ProcessedOutputs", .x), pattern = .y, full.names = TRUE), .progress = TRUE) %>% 
   list_c()
-oct_slices <- data.table(filename = oct_slices_fnames)[
-  , FilePath := str_replace(filename, "F:\\\\BIRAX_ProcessedOutputs", "")
-]
-setkey(oct_slices, FilePath)
+oct_slices <- data.table(
+   FilePath = str_replace(oct_slices_fnames, "F:\\\\BIRAX_ProcessedOutputs", "")
+  # Find volume filename for matching back to volume details
+ )[, volume_id := str_replace(FilePath, "(.*\\\\Volume\\\\.*)(-.*)", "\\1")]
+setkey(oct_slices, FilePath, volume_id)
 
 
+out_dir <- find_rstudio_root_file("data", "output", "Fibrosis")
 # out_dir <- "E:\\Fibrosis"
 # 
 # 
@@ -296,12 +301,12 @@ setkey(oct_slices, FilePath)
 # dir_create(paste0(out_dir, "\\Imaging", unique(fnames$patientpath), "\\Volume"))
 # 
 # # Where present, create a directory for the multicolour enface images
-# oct_multicol_metadata <- oct_multicol[patients_6yr_exact_list[, .(PatientID, EncounterDate)], on = c("PatientID","ExamDate" = "EncounterDate"), nomatch = 0]
+# oct_multicol_metadata <- oct_multicol[patients_6yr_exact_list[, .(PatientID, EncounterDate, visit_sequence, months_since_index)], on = c("PatientID","ExamDate" = "EncounterDate"), nomatch = 0]
 # dir_create(paste0(out_dir, "\\Imaging", unique(str_extract(oct_multicol_metadata$FilePath,  ".*\\\\Single"))))
 # 
 # # Where present (and not already created for multicolour), create a directory for FA enface images 
 # # (All are numbered slice 1)
-# oct_fa_metadata <- oct_fa[patients_6yr_exact_list[, .(PatientID, EncounterDate)], on = c("PatientID","ExamDate" = "EncounterDate"), nomatch = 0]
+# oct_fa_metadata <- oct_fa[patients_6yr_exact_list[, .(PatientID, EncounterDate, visit_sequence, months_since_index)], on = c("PatientID","ExamDate" = "EncounterDate"), nomatch = 0]
 # dir_create(paste0(out_dir, "\\Imaging", unique(str_extract(oct_fa_metadata$FilePath,  ".*\\\\Single"))))
 # 
 # 
@@ -319,21 +324,23 @@ setkey(oct_slices, FilePath)
 # 
 # dir_create(paste0(out_dir, "\\Metadata"))
 # # For OCT, output a row for each slice.
-# fwrite(oct_details[oct_slices, on = "FilePath", nomatch = 0], paste0(out_dir, "\\Metadata", "\\OCT-slice-metadata.csv"))
-# # For multiocolour and FA, a single row for each enface image
+# oct_details[oct_slices[oct_volume_metadata[, .(volume_id, visit_sequence, months_since_index)], on = "volume_id"], on = "FilePath", nomatch = 0] %>% 
+#   fwrite(paste0(out_dir, "\\Metadata", "\\OCT-slice-metadata.csv"))
+# # # For multiocolour and FA, a single row for each enface image
 # fwrite(oct_multicol_metadata, paste0(out_dir, "\\Metadata", "\\multicol-metadata.csv"))
 # fwrite(oct_fa_metadata, paste0(out_dir, "\\Metadata", "\\fa-metadata.csv"))
-# 
+# # 
 # # 14:53 multicol
 # # 15:11 OCT
 # 
-# 
-### Extract cliniial data for the selected cohort ###
-
-# oct_volumes[patients_6yr_exact_list[, .(PatientID, EncounterDate)], on = c("PatientID","ExamDate" = "EncounterDate"), nomatch = 0]
 
 
-# Cohort overlap.
+
+
+
+
+### Extract clinical data for the selected cohort ###
+
 
 
 
