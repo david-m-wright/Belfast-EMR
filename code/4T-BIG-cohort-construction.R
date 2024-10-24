@@ -188,11 +188,15 @@ namd_baseline[inj_R == TRUE & no_multicol_R == TRUE,.(PatientID)][
 
 # Only include patients with a visit at exactly 3 years
 
-patients_3yr_exact <- distinct(namd_baseline[(inj_R == T & oct_R == 1)|(inj_L == T & oct_L == 1),.(PatientID)][
+patients_3yr_exact_list <- distinct(namd_baseline[(inj_R == T & oct_R == 1)|(inj_L == T & oct_L == 1),.(PatientID)][
   visits_4t_summary, on = "PatientID", nomatch =0][
     months_since_index >=36 & months_since_index < 37 & (oct_L == 1 | oct_R == 1), .(PatientID)])[
       visits_4t_summary, on = "PatientID", nomatch = 0
-    ][, months_since_index := floor(months_since_index)][,
+    ]
+
+
+patients_3yr_exact <- patients_3yr_exact_list[
+  , months_since_index := floor(months_since_index)][,
                                                          .(visits = .N,
                                                            injections = sum(inj_L+inj_R),
                                                            va_measurements = sum(va_L + va_R),
