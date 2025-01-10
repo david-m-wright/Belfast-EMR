@@ -32,7 +32,7 @@ setkey(oct_slices, FilePath, volume_id)
 
 
 # out_dir <- find_rstudio_root_file("data", "output", "4T-BIG")
-out_dir <- "E:\\4T-BIG"
+out_dir <- "K:\\4T-BIG"
 # 
 # 
 # ## Copy imaging to the target directory, maintaining the source directory structure

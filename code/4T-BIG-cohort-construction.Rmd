@@ -92,9 +92,11 @@ Where a patient also has multicolour or FA images, these are stored in a `Single
 
 The meta-data to accompany the images is stored in three files, one for each modality, an example given in \@ref(tab:meta-data).
 
-```{r meta-data}
+```{r meta-data, warning=FALSE, message=FALSE}
+# Slow to read in oct_slices (10mins)
+source(find_rstudio_root_file("Code/4T-BIG-cohort-extraction.R"))
 oct_details[oct_slices, on = "FilePath", nomatch = 0][1:10, ] %>% 
-  select(-filename) %>% 
+  select(-volume_id) %>% 
   kbl(caption = "Imaging meta-data.") %>% 
   kable_paper()
 ```
